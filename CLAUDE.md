@@ -14,13 +14,14 @@ ventas, compras, gastos y cierre de caja de un bar familiar.
 
 ## Estructura
 - `inventario/`: Producto, Categoria, Proveedor, Compra, DetalleCompra, MovimientoInventario
-- `ventas/`: Venta, DetalleVenta
+- `ventas/`: Cuenta, ItemConsumo (cuentas abiertas por mesa/cliente)
 - `finanzas/`: Gasto, CierreCaja
 
 ## Reglas
 - Dinero en pesos colombianos como enteros (IntegerField), nunca float.
 - El stock de un producto se deriva de MovimientoInventario, no se edita a mano.
-- DetalleVenta guarda el precio al momento de la venta.
+- ItemConsumo guarda el precio al momento de agregarlo a la cuenta.
+- El stock se descuenta al agregar un item a la cuenta, no al cerrarla.
 - Zona horaria America/Bogota, idioma es-co.
 - La lógica de dinero y stock lleva pruebas (tests.py).
 - Cambios pequeños: un módulo por vez, un commit por funcionalidad.
