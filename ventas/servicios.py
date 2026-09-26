@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+from finanzas.periodos import verificar_periodo_abierto
 from inventario.models import MovimientoInventario, TipoMovimiento
 
 from .models import Cuenta, EstadoCuenta, ItemConsumo, MetodoPago
@@ -51,6 +52,7 @@ def agregar_item(cuenta, producto, cantidad, forzar=False, nota_forzado=""):
         raise ValidationError('"Vender de todos modos" requiere una nota.')
 
     with transaction.atomic():
+        verificar_periodo_abierto(timezone.now())
         cuenta = _cuenta_abierta(cuenta)
         if not producto.activo:
             raise ValidationError(f"{producto} está inactivo.")
