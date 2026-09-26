@@ -9,6 +9,8 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+from finanzas.periodos import verificar_periodo_abierto
+
 from .models import Compra, DetalleCompra, MovimientoInventario, Producto, TipoMovimiento
 
 
@@ -36,6 +38,7 @@ def registrar_compra(lineas, proveedor=None, fecha=None, numero_factura="", paga
             )
 
     fecha = fecha or timezone.now()
+    verificar_periodo_abierto(fecha)
     with transaction.atomic():
         compra = Compra.objects.create(
             proveedor=proveedor,
