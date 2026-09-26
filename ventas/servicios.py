@@ -93,6 +93,7 @@ def quitar_item(item):
     que sigue corregido aunque el producto vuelva a la nevera.
     """
     with transaction.atomic():
+        verificar_periodo_abierto(timezone.now())
         item = ItemConsumo.objects.select_related("cuenta").get(pk=item.pk)
         _cuenta_abierta(item.cuenta)
         if not item.vigente:
@@ -115,6 +116,7 @@ def cerrar_cuenta(cuenta, metodo_pago=None):
         raise ValidationError(f"Método de pago inválido: {metodo_pago}.")
 
     with transaction.atomic():
+        verificar_periodo_abierto(timezone.now())
         cuenta = _cuenta_abierta(cuenta)
         total = cuenta.calcular_total()
         if total > 0 and metodo_pago is None:
