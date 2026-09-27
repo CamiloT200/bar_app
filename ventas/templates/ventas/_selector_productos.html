@@ -34,13 +34,7 @@
               data-nombre="{{ producto.nombre }}" data-categoria="{{ producto.categoria_id }}">
         <span class="nombre">{{ producto.nombre }}</span>
         <span class="precio">{{ producto.precio_venta|pesos }}</span>
-        {% if producto.stock_actual <= 0 %}
-          <span class="badge text-bg-danger stock" title="Sin stock">{{ producto.stock_actual }}</span>
-        {% elif producto.stock_actual <= producto.stock_minimo %}
-          <span class="badge text-bg-warning stock" title="Stock bajo">{{ producto.stock_actual }}</span>
-        {% else %}
-          <span class="badge text-bg-secondary stock">{{ producto.stock_actual }}</span>
-        {% endif %}
+        {% include "_stock.html" with producto=producto %}
       </button>
     {% empty %}
       <p class="text-body-secondary">No hay productos activos. Créalos en el admin.</p>

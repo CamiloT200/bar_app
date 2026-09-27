@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load static formato stock %}
+{% block titulo %}Productos{% endblock %}
+{% block nav_inventario %}active{% endblock %}
+
+{% block contenido %}
+{% include "inventario/_pestanas.html" with activa="productos" %}
+
+{% if alertas %}
+  <div class="alert alert-warning fs-5 py-2 d-flex align-items-center gap-3">
+    <span class="me-auto"><i class="bi bi-exclamation-triangle"></i>
+      {{ alertas }} producto{{ alertas|pluralize }} en el mínimo o por debajo</span>
+    {% if not solo_alertas %}<a href="{{ url_solo_alertas }}" class="btn btn-warning btn-tactil">Ver solo esos</a>{% endif %}
+  </div>
+{% endif %}
+
+<div class="d-flex flex-wrap gap-2 mb-2">
+  <input type="search" id="buscar-producto" class="form-control form-control-tactil flex-grow-1" style="max-width: 420px"
+         placeholder="Buscar producto…" autocomplete="off" aria-label="Buscar producto">
+  <a href="{% url 'inventario:producto_nuevo' %}" class="btn btn-primary btn-tactil"><i class="bi bi-plus-lg"></i> Nuevo producto</a>
+  <a href="{% url 'inventario:compra_nueva' %}" class="btn btn-primary btn-tactil"><i class="bi bi-truck"></i> Registrar compra</a>
+</div>
+
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3 pestanas-categoria">
+  <a href="{{ url_todas }}" class="btn btn-outline-secondary text-body {% if not categoria_activa %}active{% endif %}">Todas</a>
+  {% for categoria, url, activa in categorias %}
+    <a href="{{ url }}" class="btn btn-outline-secondary text-body {% if activa %}active{% endif %}">{{ categoria.nombre }}</a>
+  {% endfor %}
+  <span class="ms-lg-auto"></span>
+  <a href="{{ url_alertas }}" class="btn btn-outline-warning {% if solo_alertas %}active{% endif %}">
+    <i class="bi {% if solo_alertas %}bi-check-square{% else %}bi-square{% endif %}"></i> Solo alertas</a>
+  <a href="{{ url_inactivos }}" class="btn btn-outline-secondary text-body {% if con_inactivos %}active{% endif %}">
+    <i class="bi {% if con_inactivos %}bi-check-square{% else %}bi-square{% endif %}"></i> Inactivos</a>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle fs-5">
+    <thead>
+      <tr>
+        <th>Producto</th><th>Categoría</th><th class="text-end">Precio</th>
+        <th class="text-center">Stock</th><th class="text-center">Mínimo</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for producto in productos %}
+        {% with nivel=producto|nivel_stock %}
+        <tr class="fila-producto {% if nivel == 'sin' %}table-danger{% elif nivel == 'bajo' %}table-warning{% endif %}"
+            data-nombre="{{ producto.nombre }}" data-nivel="{{ nivel }}">
+          <td>{{ producto.nombre }}{% if not producto.activo %} <span class="badge text-bg-dark border">inactivo</span>{% endif %}</td>
+          <td>{{ producto.categoria.nombre }}</td>
+          <td class="text-end text-nowrap">{{ producto.precio_venta|pesos }}</td>
+          <td class="text-center">{% include "_stock.html" with producto=producto %}</td>
+          <td class="text-center">{{ producto.stock_minimo }}</td>
+          <td class="text-end text-nowrap">
+            <a href="{% url 'inventario:producto_editar' producto.pk %}" class="btn btn-outline-secondary text-body btn-tactil"><i class="bi bi-pencil"></i> Editar</a>
+            <a href="{% url 'inventario:producto_movimiento' producto.pk %}" class="btn btn-outline-warning btn-tactil"><i class="bi bi-sliders"></i> Ajustar</a>
+          </td>
+        </tr>
+        {% endwith %}
+      {% empty %}
+        <tr><td colspan="6" class="text-center text-body-secondary py-4">No hay productos con estos filtros.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="text-body-secondary fs-5 d-none" id="sin-resultados">Ningún producto coincide con la búsqueda.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    var normalizar = window.Busqueda.normalizar;
+    var buscador = document.getElementById("buscar-producto");
+    var filas = Array.prototype.slice.call(document.querySelectorAll(".fila-producto"));
+    var sinResultados = document.getElementById("sin-resultados");
+    filas.forEach(function (fila) { fila.dataset.normalizado = normalizar(fila.dataset.nombre); });
+    buscador.addEventListener("input", function () {
+      var texto = normalizar(buscador.value), quedan = 0;
+      filas.forEach(function (fila) {
+        var coincide = fila.dataset.normalizado.indexOf(texto) !== -1;
+        fila.classList.toggle("d-none", !coincide);
+        if (coincide) quedan++;
+      });
+      sinResultados.classList.toggle("d-none", quedan > 0 || !filas.length);
+    });
+  })();
+</script>
+{% endblock %}

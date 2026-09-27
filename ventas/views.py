@@ -10,6 +10,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from finanzas.servicios import caja_abierta
 from inventario.models import Categoria, Producto
+from inventario.texto import ordenar_por_nombre
 
 from .forms import CANTIDADES_RAPIDAS, AbrirCuentaForm, AgregarItemForm, CobrarForm
 from .models import Cuenta, EstadoCuenta, ItemConsumo, MetodoPago
@@ -100,11 +101,12 @@ def cuenta(request, pk):
     if cuenta.esta_abierta:
         deshacer_pk = request.session.pop(SESION_DESHACER, None)
         contexto.update(
-            productos=Producto.objects.filter(activo=True)
-            .con_stock()
-            .select_related("categoria")
-            .order_by("nombre"),
-            categorias=Categoria.objects.filter(productos__activo=True).distinct(),
+            productos=ordenar_por_nombre(
+                Producto.objects.filter(activo=True).con_stock().select_related("categoria")
+            ),
+            categorias=ordenar_por_nombre(
+                Categoria.objects.filter(productos__activo=True).distinct()
+            ),
             cantidades=CANTIDADES_RAPIDAS,
             deshacer=next((i for i in items if i.pk == deshacer_pk), None),
         )

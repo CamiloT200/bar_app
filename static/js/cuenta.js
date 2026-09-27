@@ -3,10 +3,7 @@
 (function () {
   "use strict";
 
-  // "Águila" -> "aguila": ignora mayúsculas y tildes.
-  function normalizar(texto) {
-    return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-  }
+  var normalizar = window.Busqueda.normalizar;  // static/js/busqueda.js
 
   var buscador = document.getElementById("buscar-producto");
   var productos = Array.prototype.slice.call(document.querySelectorAll(".btn-producto"));

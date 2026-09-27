@@ -3,6 +3,12 @@
 (function () {
   "use strict";
 
+  // Igual al filtro de plantilla `pesos`: 45000 -> "$ 45.000".
+  window.formatoPesos = function (valor) {
+    var signo = valor < 0 ? "-" : "";
+    return signo + "$ " + Math.abs(valor).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  };
+
   // Evitar doble toque: un formulario solo se envía una vez. Los botones se
   // deshabilitan después del envío (setTimeout) para no perder el
   // name/value del botón que se tocó, que ya quedó en los datos del envío.

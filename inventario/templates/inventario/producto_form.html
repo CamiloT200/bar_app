@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block titulo %}{% if producto %}Editar {{ producto.nombre }}{% else %}Nuevo producto{% endif %}{% endblock %}
+{% block nav_inventario %}active{% endblock %}
+
+{% block contenido %}
+{% include "inventario/_pestanas.html" with activa="productos" %}
+<div class="row justify-content-center">
+  <div class="col-lg-8 col-xl-6">
+    <h1 class="h2 mb-3">{% if producto %}Editar {{ producto.nombre }}{% else %}Nuevo producto{% endif %}</h1>
+
+    {% if producto %}
+      <div class="card mb-3">
+        <div class="card-body d-flex align-items-center gap-3">
+          <span class="fs-5 me-auto">Stock actual: <strong class="fs-3">{{ stock }}</strong></span>
+          <a href="{% url 'inventario:producto_movimiento' producto.pk %}" class="btn btn-outline-warning btn-tactil"><i class="bi bi-sliders"></i> Ajustar stock</a>
+        </div>
+      </div>
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="alert alert-danger fs-5 py-2">{{ error }}</div>{% endfor %}
+      {% include "_campo.html" with campo=form.nombre %}
+      {% include "_campo.html" with campo=form.categoria %}
+      {% include "_campo.html" with campo=form.precio_venta %}
+      {% if producto %}
+        <p class="form-text fs-6 mt-n2 mb-3">El nuevo precio aplica a lo que se agregue desde ahora; las cuentas abiertas conservan el precio con que se agregó cada item.</p>
+      {% endif %}
+      {% include "_campo.html" with campo=form.stock_minimo %}
+      {% if form.stock_inicial %}{% include "_campo.html" with campo=form.stock_inicial %}{% endif %}
+      {% include "_campo.html" with campo=form.activo %}
+
+      <div class="d-flex gap-3 mt-4">
+        <a href="{% url 'inventario:productos' %}" class="btn btn-secondary btn-lg btn-tactil flex-fill">Cancelar</a>
+        <button type="submit" class="btn btn-primary btn-lg btn-tactil flex-fill"><i class="bi bi-check-lg"></i> Guardar</button>
+      </div>
+    </form>
+    {% if not form.categoria.field.queryset.exists %}
+      <div class="alert alert-warning mt-3">Primero crea una <a href="{% url 'inventario:categorias' %}">categoría</a>.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block titulo %}Categorías{% endblock %}
+{% block nav_inventario %}active{% endblock %}
+
+{% block contenido %}
+{% include "inventario/_pestanas.html" with activa="categorias" %}
+<div class="row">
+  <div class="col-lg-8 col-xl-6">
+    <form method="post" action="{% url 'inventario:categoria_crear' %}" class="d-flex gap-2 mb-4">
+      {% csrf_token %}
+      <input type="text" name="nombre" class="form-control form-control-tactil" placeholder="Nueva categoría…"
+             maxlength="100" required autocomplete="off" aria-label="Nombre de la nueva categoría">
+      <button type="submit" class="btn btn-primary btn-tactil text-nowrap"><i class="bi bi-plus-lg"></i> Agregar</button>
+    </form>
+
+    <ul class="list-group fs-5">
+      {% for categoria in categorias %}
+        <li class="list-group-item">
+          <div class="d-flex align-items-center gap-2 fila-item">
+            <span class="me-auto">{{ categoria.nombre }}
+              <span class="text-body-secondary fs-6">· {{ categoria.num_productos }} producto{{ categoria.num_productos|pluralize }}</span></span>
+            <button type="button" class="btn btn-outline-secondary text-body btn-tactil"
+                    data-bs-toggle="collapse" data-bs-target="#renombrar-{{ categoria.pk }}" aria-expanded="false">
+              <i class="bi bi-pencil"></i> Renombrar</button>
+            {% if not categoria.num_productos %}
+              <form method="post" action="{% url 'inventario:categoria_borrar' categoria.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-danger btn-cuadrado" aria-label="Borrar {{ categoria.nombre }}"><i class="bi bi-trash"></i></button>
+              </form>
+            {% endif %}
+          </div>
+          <form method="post" action="{% url 'inventario:categoria_renombrar' categoria.pk %}" class="collapse mt-2" id="renombrar-{{ categoria.pk }}">
+            {% csrf_token %}
+            <div class="d-flex gap-2">
+              <input type="text" name="nombre" value="{{ categoria.nombre }}" class="form-control form-control-tactil"
+                     maxlength="100" required aria-label="Nuevo nombre">
+              <button type="submit" class="btn btn-primary btn-tactil">Guardar</button>
+            </div>
+          </form>
+        </li>
+      {% empty %}
+        <li class="list-group-item text-body-secondary py-4 text-center">No hay categorías todavía.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endblock %}

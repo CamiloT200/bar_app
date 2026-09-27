@@ -1,0 +1,32 @@
+{% load formato %}
+{# Una fila del formset. La lista de productos se arma a mano para agrupar por categoría y llevar el último costo. #}
+<div class="row g-2 align-items-start linea-compra mb-2">
+  <div class="col-12 col-md-5">
+    <select name="{{ linea.producto.html_name }}" class="form-select form-control-tactil campo-producto" aria-label="Producto">
+      <option value="">— Producto —</option>
+      {% for categoria, productos in grupos_productos %}
+        <optgroup label="{{ categoria.nombre }}">
+          {% for producto in productos %}
+            <option value="{{ producto.pk }}" data-costo="{{ producto.ultimo_costo|default_if_none:'' }}"
+                    {% if linea.producto.value|stringformat:"s" == producto.pk|stringformat:"s" %}selected{% endif %}>{{ producto.nombre }}</option>
+          {% endfor %}
+        </optgroup>
+      {% endfor %}
+    </select>
+    {% for error in linea.producto.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+  </div>
+  <div class="col-4 col-md-2">
+    <input type="number" name="{{ linea.cantidad.html_name }}" value="{{ linea.cantidad.value|default_if_none:'' }}"
+           min="1" inputmode="numeric" placeholder="Cant." class="form-control form-control-tactil campo-cantidad" aria-label="Cantidad">
+    {% for error in linea.cantidad.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+  </div>
+  <div class="col-5 col-md-2">
+    <input type="number" name="{{ linea.costo_unitario.html_name }}" value="{{ linea.costo_unitario.value|default_if_none:'' }}"
+           min="0" step="1" inputmode="numeric" placeholder="Costo c/u" class="form-control form-control-tactil campo-costo" aria-label="Costo unitario">
+    {% for error in linea.costo_unitario.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+  </div>
+  <div class="col-3 col-md-3 d-flex align-items-center gap-2">
+    <span class="fs-5 text-nowrap me-auto subtotal-linea"></span>
+    <button type="button" class="btn btn-outline-danger btn-cuadrado quitar-linea" aria-label="Vaciar línea"><i class="bi bi-x-lg"></i></button>
+  </div>
+</div>

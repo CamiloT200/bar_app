@@ -82,9 +82,15 @@ def registrar_movimiento_manual(producto, tipo, cantidad, nota="", fecha=None):
     if tipo == TipoMovimiento.MERMA and cantidad > 0:
         raise ValidationError("Una merma debe ser negativa.")
     if tipo in (TipoMovimiento.AJUSTE, TipoMovimiento.MERMA) and not nota.strip():
-        raise ValidationError("Los ajustes y las mermas requieren una nota.")
+        raise ValidationError("Los ajustes y las mermas requieren una nota.", code="nota_requerida")
 
     with transaction.atomic():
+        # Un segundo "inicial" sería un ajuste disfrazado que no exige nota.
+        if tipo == TipoMovimiento.INICIAL and producto.movimientos.exists():
+            raise ValidationError(
+                f"{producto} ya tiene movimientos: usa un ajuste por conteo.",
+                code="inicial_repetido",
+            )
         if cantidad < 0:
             stock = producto.stock
             if stock + cantidad < 0:
@@ -98,3 +104,39 @@ def registrar_movimiento_manual(producto, tipo, cantidad, nota="", fecha=None):
             nota=nota.strip(),
             fecha=fecha or timezone.now(),
         )
+
+
+def ajustar_por_conteo(producto, conteo, nota):
+    """Deja el stock exactamente en `conteo` con un AJUSTE por la diferencia.
+
+    La diferencia se calcula aquí, con el stock del momento de guardar: si
+    entre tanto se vendió algo, el resultado sigue siendo lo contado.
+    """
+    if not isinstance(conteo, int) or isinstance(conteo, bool) or conteo < 0:
+        raise ValidationError(f"Conteo inválido: {conteo}.")
+    if not nota.strip():
+        raise ValidationError("Los ajustes requieren una nota.", code="nota_requerida")
+
+    with transaction.atomic():
+        diferencia = conteo - producto.stock
+        if diferencia == 0:
+            raise ValidationError(
+                f"El conteo coincide con el stock de {producto}: no hay nada que ajustar.",
+                code="sin_diferencia",
+            )
+        return registrar_movimiento_manual(producto, TipoMovimiento.AJUSTE, diferencia, nota=nota)
+
+
+def crear_producto(datos, stock_inicial=0):
+    """Crea el producto y, si stock_inicial > 0, su movimiento INICIAL.
+
+    Ambos en una sola transacción: si el movimiento falla, el producto
+    tampoco queda creado.
+    """
+    if not isinstance(stock_inicial, int) or isinstance(stock_inicial, bool) or stock_inicial < 0:
+        raise ValidationError(f"Inventario inicial inválido: {stock_inicial}.")
+    with transaction.atomic():
+        producto = Producto.objects.create(**datos)
+        if stock_inicial > 0:
+            registrar_movimiento_manual(producto, TipoMovimiento.INICIAL, stock_inicial)
+        return producto
