@@ -8,6 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from acceso.pruebas import iniciar_sesion
 from inventario.models import Categoria, Compra, MovimientoInventario, Producto
 from inventario.servicios import LineaCompra, registrar_compra, registrar_movimiento_manual
 from ventas.models import Cuenta
@@ -399,6 +400,10 @@ class ResumenVentanaTests(BaseJornada):
 
 
 class VistasFinanzasTests(BaseJornada):
+    def setUp(self):
+        super().setUp()
+        iniciar_sesion(self.client)
+
     def url(self, nombre, *args):
         return reverse(f"finanzas:{nombre}", args=args)
 

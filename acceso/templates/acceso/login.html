@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load static %}
+{% block titulo %}Iniciar sesión{% endblock %}
+{% block barra %}{% endblock %}
+{% block clase_main %}pantalla-login{% endblock %}
+
+{% block contenido %}
+<div class="tarjeta-neon card">
+  <div class="card-body p-4">
+    <img src="{% static 'img/logo.jpeg' %}" alt="El Laboratorio Bar" class="logo-login d-block mx-auto mb-3">
+
+    <form method="post" action="{% url 'acceso:login' %}">
+      {% csrf_token %}
+      <input type="hidden" name="siguiente" value="{{ siguiente }}">
+      {% if error %}<div class="alert alert-danger fs-5 py-2" role="alert"><i class="bi bi-x-octagon"></i> {{ error }}</div>{% endif %}
+
+      <label for="usuario" class="form-label fs-5">Usuario</label>
+      <input type="text" name="usuario" id="usuario" value="{{ usuario }}" required
+             autocomplete="username" autocapitalize="none" spellcheck="false"
+             class="form-control form-control-tactil mb-3" {% if not usuario %}autofocus{% endif %}>
+
+      <label for="clave" class="form-label fs-5">Contraseña</label>
+      <input type="password" name="clave" id="clave" required autocomplete="current-password"
+             class="form-control form-control-tactil mb-4" {% if usuario %}autofocus{% endif %}>
+
+      <button type="submit" class="btn btn-primary btn-lg btn-tactil w-100 fs-4">
+        <i class="bi bi-box-arrow-in-right"></i> Entrar
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

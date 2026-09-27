@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'inventario',
     'ventas',
     'finanzas',
+    'acceso',
 ]
 
 MIDDLEWARE = [
@@ -50,7 +51,17 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Exige la sesión de El Laboratorio en todo salvo /login/ y /static/.
+    'acceso.middleware.RequiereSesionMiddleware',
 ]
+
+# Inicio de sesión de un solo usuario (sin el sistema de usuarios de Django).
+# La app solo escucha en 127.0.0.1: evita el uso casual, no es seguridad fuerte.
+BAR_USUARIO = 'laboratorio'
+BAR_CLAVE = '1234'
+LOGIN_URL = '/login/'
+# Por defecto Django mantiene la sesión dos semanas; esto la cierra con el navegador.
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 
 ROOT_URLCONF = 'config.urls'
 

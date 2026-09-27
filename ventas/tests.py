@@ -5,6 +5,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 
+from acceso.pruebas import iniciar_sesion
 from inventario.models import Categoria, MovimientoInventario, Producto
 from inventario.servicios import registrar_movimiento_manual
 
@@ -294,6 +295,10 @@ class CodigoStockInsuficienteTests(BaseVentas):
 
 
 class VistasVentasTests(BaseVentas):
+    def setUp(self):
+        super().setUp()
+        iniciar_sesion(self.client)
+
     def url(self, nombre, *args):
         return reverse(f"ventas:{nombre}", args=args)
 

@@ -8,6 +8,8 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from acceso.pruebas import iniciar_sesion
+
 from .models import Categoria, Compra, DetalleCompra, MovimientoInventario, Producto, Proveedor
 from .servicios import (
     LineaCompra,
@@ -277,6 +279,10 @@ class AjusteYCreacionTests(BaseInventario):
 
 
 class VistasInventarioTests(BaseInventario):
+    def setUp(self):
+        super().setUp()
+        iniciar_sesion(self.client)
+
     def url(self, nombre, *args):
         return reverse(f"inventario:{nombre}", args=args)
 

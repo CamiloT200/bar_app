@@ -3,16 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block titulo %}Bar{% endblock %} · Bar</title>
+  <title>{% block titulo %}Inicio{% endblock %} · El Laboratorio</title>
+  <link rel="icon" type="image/jpeg" href="{% static 'img/logo.jpeg' %}">
   <link rel="stylesheet" href="{% static 'vendor/bootstrap/css/bootstrap.min.css' %}">
   <link rel="stylesheet" href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}">
+  {# tema.css = identidad (colores y brillos); app.css = tamaños táctiles y distribución. #}
+  <link rel="stylesheet" href="{% static 'css/tema.css' %}">
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
 </head>
 <body>
-  <nav class="navbar navbar-expand bg-body-tertiary border-bottom mb-3">
+  {% block barra %}
+  <nav class="navbar navbar-expand barra-lab mb-3">
     <div class="container-fluid">
-      <a class="navbar-brand fw-bold" href="{% url 'ventas:tablero' %}"><i class="bi bi-cup-straw"></i> Bar</a>
-      <ul class="navbar-nav">
+      <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'ventas:tablero' %}">
+        <img src="{% static 'img/logo.jpeg' %}" alt="" height="44" width="44" class="logo-barra">
+        <span class="marca-lab">El Laboratorio</span>
+      </a>
+      <ul class="navbar-nav me-auto">
         <li class="nav-item">
           <a class="nav-link {% block nav_ventas %}{% endblock %}" href="{% url 'ventas:tablero' %}"><i class="bi bi-receipt"></i> Ventas</a>
         </li>
@@ -23,10 +30,15 @@
           <a class="nav-link {% block nav_finanzas %}{% endblock %}" href="{% url 'finanzas:caja' %}"><i class="bi bi-cash-stack"></i> Finanzas</a>
         </li>
       </ul>
+      <form method="post" action="{% url 'acceso:logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-secondary text-body"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</button>
+      </form>
     </div>
   </nav>
+  {% endblock %}
 
-  <main class="container-fluid pb-4">
+  <main class="{% block clase_main %}container-fluid pb-4{% endblock %}">
     {% block mensajes %}
       {% for mensaje in messages %}
         <div class="alert alert-{{ mensaje.tags }} fs-5 py-2" role="alert">{{ mensaje }}</div>
