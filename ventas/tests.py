@@ -10,7 +10,14 @@ from inventario.models import Categoria, MovimientoInventario, Producto
 from inventario.servicios import registrar_movimiento_manual
 
 from .models import Cuenta, ItemConsumo, Mesero
-from .servicios import abrir_cuenta, agregar_item, cerrar_cuenta, crear_mesero, quitar_item
+from .servicios import (
+    abrir_cuenta,
+    agregar_item,
+    cerrar_cuenta,
+    crear_mesero,
+    eliminar_cuenta,
+    quitar_item,
+)
 
 Tipo = MovimientoInventario.Tipo
 Estado = Cuenta.Estado
@@ -553,6 +560,98 @@ class MeserosTests(BaseVentas):
 
     def test_mesero_crear_no_acepta_get(self):
         self.assertEqual(self.client.get(reverse("ventas:mesero_crear")).status_code, 405)
+
+
+class EliminarCuentaTests(BaseVentas):
+    def test_cuenta_sin_productos_se_borra_del_todo(self):
+        self.assertEqual(eliminar_cuenta(self.mesa), (None, 0))
+        self.assertFalse(Cuenta.objects.filter(pk=self.mesa.pk).exists())
+
+    def test_cuenta_con_productos_devuelve_el_stock_y_queda_eliminada(self):
+        self.cargar_stock(self.aguila, 10)
+        self.cargar_stock(self.club, 10)
+        agregar_item(self.mesa, self.aguila, 3)
+        agregar_item(self.mesa, self.club, 2)
+        quitado = agregar_item(self.mesa, self.aguila, 1)
+        quitar_item(quitado)  # ya devuelto: no se revierte dos veces
+
+        cuenta, devueltas = eliminar_cuenta(self.mesa)
+        self.assertEqual(devueltas, 5)
+        self.assertEqual((cuenta.estado, cuenta.total, cuenta.metodo_pago), (Estado.ELIMINADA, None, None))
+        self.assertIsNotNone(cuenta.eliminada_en)
+        self.assertFalse(cuenta.items_vigentes().exists())
+        for item in cuenta.items.all():
+            self.assertEqual(item.movimiento_reversion.tipo, Tipo.REVERSION_CONSUMO)
+            self.assertEqual(item.movimiento_reversion.cantidad, item.cantidad)
+        self.assertEqual((self.aguila.stock, self.club.stock), (10, 10))
+
+    def test_el_ajuste_forzado_no_se_revierte(self):
+        agregar_item(self.mesa, self.aguila, 2, forzar=True, nota_forzado="Había en la nevera")
+        eliminar_cuenta(self.mesa)
+        self.assertTrue(self.aguila.movimientos.filter(tipo=Tipo.AJUSTE, cantidad=2).exists())
+        self.assertEqual(self.aguila.stock, 2)
+
+    def test_restricciones_de_eliminar(self):
+        self.cargar_stock(self.aguila, 10)
+        agregar_item(self.mesa, self.aguila, 1)
+        cobrada = abrir_cuenta("Mesa 5")
+        agregar_item(cobrada, self.aguila, 1)
+        cerrar_cuenta(cobrada, Pago.EFECTIVO)
+        with self.assertRaises(ValidationError):
+            eliminar_cuenta(cobrada)  # ya cobrada: no se elimina
+
+        eliminar_cuenta(self.mesa)
+        for accion in [
+            lambda: eliminar_cuenta(self.mesa),
+            lambda: agregar_item(self.mesa, self.aguila, 1),
+            lambda: cerrar_cuenta(self.mesa, Pago.EFECTIVO),
+        ]:
+            with self.assertRaisesMessage(ValidationError, "La cuenta Mesa 3 fue eliminada."):
+                accion()
+        # El nombre queda libre.
+        self.assertTrue(abrir_cuenta("Mesa 3").esta_abierta)
+        # La base de datos exige la fecha de eliminación.
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Cuenta.objects.create(identificador="X", estado=Estado.ELIMINADA)
+
+    def test_eliminada_no_cuenta_en_tablero_ni_en_caja(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from finanzas.servicios import resumen_ventana
+
+        self.cargar_stock(self.aguila, 10)
+        inicio = timezone.now() - timedelta(minutes=1)
+        agregar_item(self.mesa, self.aguila, 2)
+        eliminar_cuenta(self.mesa)
+        resumen = resumen_ventana(inicio, timezone.now() + timedelta(minutes=1))
+        self.assertEqual((resumen.ventas_efectivo, resumen.ventas_otros_medios, resumen.cuentas_abiertas), (0, 0, 0))
+
+        iniciar_sesion(self.client)
+        respuesta = self.client.get(reverse("ventas:tablero"))
+        self.assertEqual(list(respuesta.context["cuentas"]), [])
+
+    def test_vista_eliminar(self):
+        iniciar_sesion(self.client)
+        url_cuenta = reverse("ventas:cuenta", args=[self.mesa.pk])
+        self.assertContains(self.client.get(url_cuenta), 'id="boton-eliminar"')
+        self.assertEqual(self.client.get(reverse("ventas:eliminar", args=[self.mesa.pk])).status_code, 405)
+
+        self.cargar_stock(self.aguila, 10)
+        agregar_item(self.mesa, self.aguila, 3)
+        respuesta = self.client.post(reverse("ventas:eliminar", args=[self.mesa.pk]), follow=True)
+        self.assertRedirects(respuesta, reverse("ventas:tablero"))
+        self.assertIn(
+            "Cuenta Mesa 3 eliminada (3 unidades devueltas al inventario).",
+            [str(m) for m in respuesta.context["messages"]],
+        )
+
+        respuesta = self.client.get(url_cuenta)
+        self.assertContains(respuesta, "Sus productos volvieron al inventario.")
+        self.assertNotContains(respuesta, 'id="boton-eliminar"')
+        self.assertNotContains(respuesta, "COBRAR")
+        self.assertNotContains(respuesta, 'id="form-agregar"')
 
 
 class FiltroPesosTests(TestCase):

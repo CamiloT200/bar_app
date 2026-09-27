@@ -24,7 +24,7 @@
   <a href="{% url 'ventas:tablero' %}" class="btn btn-secondary btn-tactil"><i class="bi bi-arrow-left"></i> Cuentas</a>
   <h1 class="h2 mb-0 text-truncate">{{ cuenta.identificador }}</h1>
   {% if cuenta.mesero %}<span class="fs-5 text-body-secondary text-nowrap"><i class="bi bi-person"></i> {{ cuenta.mesero.nombre }}</span>{% endif %}
-  {% if not cuenta.esta_abierta %}<span class="badge text-bg-secondary fs-6">Cerrada</span>{% endif %}
+  {% if not cuenta.esta_abierta %}<span class="badge text-bg-secondary fs-6">{{ cuenta.get_estado_display }}</span>{% endif %}
 </div>
 
 <div class="row g-3">
@@ -57,6 +57,31 @@
         <form method="post" id="form-quitar" action="">
           {% csrf_token %}
           <button type="submit" class="btn btn-danger btn-tactil"><i class="bi bi-dash-circle"></i> Quitar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if cuenta.esta_abierta %}
+<div class="modal fade" id="modal-eliminar" tabindex="-1" aria-labelledby="titulo-eliminar" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h2 class="modal-title h4" id="titulo-eliminar">¿Eliminar la cuenta {{ cuenta.identificador }}?</h2></div>
+      <div class="modal-body fs-5">
+        {% if items %}
+          <p>Los productos de la cuenta ({{ total|pesos }}) <strong>vuelven al inventario</strong>.</p>
+          <p class="mb-0 text-body-secondary fs-6">Úsalo para cuentas abiertas por error. La cuenta queda registrada como eliminada.</p>
+        {% else %}
+          <p class="mb-0">La cuenta no tiene productos y se borrará.</p>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-tactil" data-bs-dismiss="modal">Cancelar</button>
+        <form method="post" action="{% url 'ventas:eliminar' cuenta.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger btn-tactil"><i class="bi bi-trash"></i> Sí, eliminar</button>
         </form>
       </div>
     </div>

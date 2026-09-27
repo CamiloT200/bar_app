@@ -21,6 +21,8 @@ def _es_entero_positivo(valor):
 def _cuenta_abierta(cuenta):
     """Relee la cuenta de la base de datos y exige que siga abierta."""
     cuenta = Cuenta.objects.get(pk=cuenta.pk)
+    if cuenta.estado == EstadoCuenta.ELIMINADA:
+        raise ValidationError(f"La cuenta {cuenta.identificador} fue eliminada.")
     if not cuenta.esta_abierta:
         raise ValidationError(f"La cuenta {cuenta.identificador} ya está cerrada.")
     return cuenta
@@ -125,16 +127,47 @@ def quitar_item(item):
         _cuenta_abierta(item.cuenta)
         if not item.vigente:
             raise ValidationError("Ese item ya fue retirado de la cuenta.")
-
-        item.movimiento_reversion = MovimientoInventario.objects.create(
-            producto=item.producto,
-            tipo=TipoMovimiento.REVERSION_CONSUMO,
-            cantidad=item.cantidad,
-            nota=f"Retirado de cuenta #{item.cuenta.pk} ({item.cuenta.identificador})",
-        )
-        item.retirado_en = timezone.now()
-        item.save(update_fields=["movimiento_reversion", "retirado_en"])
+        _revertir_item(item, item.cuenta, "Retirado de")
         return item
+
+
+def _revertir_item(item, cuenta, motivo):
+    """Devuelve la cantidad del item al stock y lo marca como retirado."""
+    item.movimiento_reversion = MovimientoInventario.objects.create(
+        producto=item.producto,
+        tipo=TipoMovimiento.REVERSION_CONSUMO,
+        cantidad=item.cantidad,
+        nota=f"{motivo} cuenta #{cuenta.pk} ({cuenta.identificador})",
+    )
+    item.retirado_en = timezone.now()
+    item.save(update_fields=["movimiento_reversion", "retirado_en"])
+
+
+def eliminar_cuenta(cuenta):
+    """Elimina una cuenta abierta y devuelve al stock todo lo que tenía.
+
+    - Si nunca tuvo items, se borra del todo y devuelve (None, 0).
+    - Si tuvo items, cada item vigente se revierte (como quitar_item) y la
+      cuenta queda en estado ELIMINADA para auditoría. Devuelve
+      (cuenta, unidades devueltas).
+    Los ajustes de "vender de todos modos" no se revierten, igual que al
+    quitar un item. Una cuenta cerrada (ya cobrada) no se puede eliminar.
+    """
+    with transaction.atomic():
+        verificar_periodo_abierto(timezone.now())
+        cuenta = _cuenta_abierta(cuenta)
+        if not cuenta.items.exists():
+            cuenta.delete()
+            return None, 0
+
+        devueltas = 0
+        for item in cuenta.items_vigentes().select_related("producto"):
+            _revertir_item(item, cuenta, "Eliminada")
+            devueltas += item.cantidad
+        cuenta.estado = EstadoCuenta.ELIMINADA
+        cuenta.eliminada_en = timezone.now()
+        cuenta.save(update_fields=["estado", "eliminada_en"])
+        return cuenta, devueltas
 
 
 def cerrar_cuenta(cuenta, metodo_pago=None):

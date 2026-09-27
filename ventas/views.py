@@ -15,7 +15,14 @@ from inventario.texto import ordenar_por_nombre
 
 from .forms import CANTIDADES_RAPIDAS, AbrirCuentaForm, AgregarItemForm, CobrarForm, MeseroForm
 from .models import Cuenta, EstadoCuenta, ItemConsumo, Mesero, MetodoPago
-from .servicios import abrir_cuenta, agregar_item, cerrar_cuenta, crear_mesero, quitar_item
+from .servicios import (
+    abrir_cuenta,
+    agregar_item,
+    cerrar_cuenta,
+    crear_mesero,
+    eliminar_cuenta,
+    quitar_item,
+)
 from .templatetags.formato import pesos
 
 SESION_DESHACER = "ventas_deshacer_item"
@@ -209,11 +216,29 @@ def quitar(request, pk):
     return redirect("ventas:cuenta", pk=item.cuenta_id)
 
 
+@require_POST
+def eliminar(request, pk):
+    cuenta = get_object_or_404(Cuenta, pk=pk)
+    nombre = cuenta.identificador
+    try:
+        _, devueltas = eliminar_cuenta(cuenta)
+    except ValidationError as e:
+        messages.error(request, _primer_mensaje(e))
+        return redirect("ventas:cuenta", pk=cuenta.pk)
+    aviso = f"Cuenta {nombre} eliminada"
+    if devueltas:
+        aviso += f" ({devueltas} unidad{'es' if devueltas != 1 else ''} devuelta{'s' if devueltas != 1 else ''} al inventario)"
+    messages.success(request, aviso + ".")
+    return redirect("ventas:tablero")
+
+
 @require_http_methods(["GET", "POST"])
 def cobrar(request, pk):
     cuenta = get_object_or_404(Cuenta, pk=pk)
     if not cuenta.esta_abierta:
-        messages.info(request, f"La cuenta {cuenta.identificador} ya está cerrada.")
+        messages.info(
+            request, f"La cuenta {cuenta.identificador} está {cuenta.get_estado_display().lower()}."
+        )
         return redirect("ventas:cuenta", pk=cuenta.pk)
 
     if request.method == "POST":

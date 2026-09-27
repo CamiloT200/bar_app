@@ -9,6 +9,7 @@ from inventario.models import MovimientoInventario, Producto
 class EstadoCuenta(models.TextChoices):
     ABIERTA = "ABIERTA", "Abierta"
     CERRADA = "CERRADA", "Cerrada"
+    ELIMINADA = "ELIMINADA", "Eliminada"
 
 
 class MetodoPago(models.TextChoices):
@@ -53,6 +54,8 @@ class Cuenta(models.Model):
     total = models.PositiveIntegerField(
         null=True, blank=True, help_text="Se fija al cerrar la cuenta."
     )
+    # Una cuenta eliminada con consumo no se borra: queda para auditoría.
+    eliminada_en = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-abierta_en", "-id"]
@@ -62,13 +65,22 @@ class Cuenta(models.Model):
                     Q(
                         estado=EstadoCuenta.ABIERTA,
                         cerrada_en__isnull=True,
+                        eliminada_en__isnull=True,
                         metodo_pago__isnull=True,
                         total__isnull=True,
                     )
                     | Q(
                         estado=EstadoCuenta.CERRADA,
                         cerrada_en__isnull=False,
+                        eliminada_en__isnull=True,
                         total__isnull=False,
+                    )
+                    | Q(
+                        estado=EstadoCuenta.ELIMINADA,
+                        eliminada_en__isnull=False,
+                        cerrada_en__isnull=True,
+                        metodo_pago__isnull=True,
+                        total__isnull=True,
                     )
                 ),
                 name="cuenta_estado_coherente",

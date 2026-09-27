@@ -54,6 +54,15 @@
       <a href="{% url 'ventas:cobrar' cuenta.pk %}" class="btn btn-primary btn-lg btn-tactil w-100 fs-3">
         <i class="bi bi-cash-coin"></i> COBRAR
       </a>
+      <button type="button" class="btn btn-outline-danger btn-tactil w-100 mt-2" id="boton-eliminar"
+              data-bs-toggle="modal" data-bs-target="#modal-eliminar">
+        <i class="bi bi-trash"></i> Eliminar cuenta
+      </button>
+    {% elif cuenta.estado == "ELIMINADA" %}
+      <div class="fs-5 text-body-secondary">
+        Eliminada · {{ cuenta.eliminada_en|date:"j M" }} {{ cuenta.eliminada_en|time:"g:i a" }}.
+        Sus productos volvieron al inventario.
+      </div>
     {% else %}
       <div class="fs-5 text-body-secondary">
         {% if cuenta.metodo_pago %}Cobrada en {{ cuenta.get_metodo_pago_display }}{% else %}Cerrada sin cobro{% endif %}
