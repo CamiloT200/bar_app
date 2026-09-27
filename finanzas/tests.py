@@ -5,6 +5,7 @@ from unittest import mock
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from inventario.models import Categoria, Compra, MovimientoInventario, Producto
@@ -13,7 +14,7 @@ from ventas.models import Cuenta
 from ventas.servicios import abrir_cuenta, agregar_item, cerrar_cuenta, quitar_item
 
 from .models import CierreCaja, Gasto
-from .servicios import abrir_caja, cerrar_caja, registrar_gasto
+from .servicios import abrir_caja, caja_abierta, cerrar_caja, registrar_gasto, resumen_ventana
 
 Pago = Cuenta.MetodoPago
 Estado = Cuenta.Estado
@@ -352,3 +353,225 @@ class NocheCompletaTests(BaseFinanzas):
         self.assertIn("1 cuenta(s) abierta(s)", cierre.advertencia)
         self.assertEqual(cierre.observaciones, "Noche normal")
         self.assertEqual(self.aguila.stock, 20 - 5 - 1 + 12)
+
+
+# ---------------------------------------------------------------------------
+# Interfaz web de finanzas
+# ---------------------------------------------------------------------------
+
+
+class BaseJornada(BaseFinanzas):
+    def cargar_jornada(self):
+        self.abrir(h(0), base=50000)
+        self.cuenta_cerrada(h(1), 20000, Pago.EFECTIVO)
+        self.cuenta_cerrada(h(2), 15000, Pago.NEQUI)
+        self.compra(h(3), 30000)
+        self.gasto(h(4), 8000)
+        self.gasto(h(4), 5000, pagado_con_caja=False)
+
+
+class ResumenVentanaTests(BaseJornada):
+    # 1
+    def test_resumen_en_vivo_coincide_con_el_cierre(self):
+        self.cargar_jornada()
+        Cuenta.objects.create(identificador="Mesa 9")
+        resumen = resumen_ventana(h(0), h(8))
+        cierre = self.cerrar(h(8), contado=30000)
+        self.assertEqual(
+            (
+                resumen.ventas_efectivo,
+                resumen.ventas_otros_medios,
+                resumen.compras_efectivo,
+                resumen.gastos_efectivo,
+                resumen.efectivo_esperado(cierre.base_inicial),
+                resumen.cuentas_abiertas,
+            ),
+            (
+                cierre.ventas_efectivo,
+                cierre.ventas_otros_medios,
+                cierre.compras_efectivo,
+                cierre.gastos_efectivo,
+                cierre.efectivo_esperado,
+                cierre.cuentas_abiertas_al_cerrar,
+            ),
+        )
+        self.assertEqual(cierre.efectivo_esperado, 32000)
+
+
+class VistasFinanzasTests(BaseJornada):
+    def url(self, nombre, *args):
+        return reverse(f"finanzas:{nombre}", args=args)
+
+    def mensajes(self, respuesta):
+        return [str(m) for m in respuesta.context["messages"]]
+
+    # 2
+    def test_caja_sin_caja_abierta_y_pendiente(self):
+        respuesta = self.client.get(self.url("caja"))
+        self.assertContains(respuesta, "Aún no se ha abierto ninguna caja.")
+        self.assertContains(respuesta, 'name="base_inicial"')
+        self.assertIsNone(respuesta.context["resumen"])
+
+        self.abrir(h(0))
+        self.cerrar(h(8))
+        self.gasto(h(9), 7000)
+        respuesta = self.client.get(self.url("caja"))
+        self.assertIsNone(respuesta.context["caja"])
+        self.assertEqual(respuesta.context["desde"], h(8))
+        self.assertEqual(respuesta.context["resumen"].gastos_efectivo, 7000)
+        self.assertContains(respuesta, "Pendiente para la próxima jornada")
+
+    # 3
+    def test_abrir_caja(self):
+        respuesta = self.client.post(self.url("abrir"), {"base_inicial": "50000", "siguiente": "/ventas/"})
+        self.assertRedirects(respuesta, "/ventas/", fetch_redirect_response=False)
+        self.assertEqual(caja_abierta().base_inicial, 50000)
+
+        respuesta = self.client.post(self.url("abrir"), {"base_inicial": "1000"}, follow=True)
+        self.assertIn("Ya hay una caja abierta; ciérrala antes de abrir otra.", self.mensajes(respuesta))
+
+        cerrar_caja(0)
+        for base in ["-5", ""]:
+            with self.subTest(base=base):
+                respuesta = self.client.post(self.url("abrir"), {"base_inicial": base}, follow=True)
+                self.assertIn(
+                    "Escribe la base inicial (un número de 0 en adelante).", self.mensajes(respuesta)
+                )
+        self.assertIsNone(caja_abierta())
+
+        respuesta = self.client.post(
+            self.url("abrir"),
+            {"base_inicial": "1000", "siguiente": "https://malicioso.example.com/"},
+            follow=True,
+        )
+        self.assertRedirects(respuesta, self.url("caja"))
+        self.assertIn("Caja abierta con base $ 1.000.", self.mensajes(respuesta))
+
+    # 4
+    def test_caja_abierta_muestra_resumen_y_cuentas_abiertas(self):
+        self.cargar_jornada()
+        Cuenta.objects.create(identificador="Mesa 3")
+        Cuenta.objects.create(identificador="Don Jorge")
+
+        respuesta = self.client.get(self.url("caja"))
+        resumen = respuesta.context["resumen"]
+        self.assertEqual(
+            (resumen.ventas_efectivo, resumen.ventas_otros_medios,
+             resumen.compras_efectivo, resumen.gastos_efectivo),
+            (20000, 15000, 30000, 8000),
+        )
+        self.assertEqual(respuesta.context["esperado"], 32000)
+        self.assertContains(respuesta, "$ 32.000")
+        self.assertContains(respuesta, "2 cuentas abiertas")
+        self.assertContains(respuesta, "Mesa 3")
+        self.assertContains(respuesta, "Don Jorge")
+        self.assertContains(respuesta, "Cuenta 0")  # cuenta cobrada en la ventana
+
+    # 5
+    def test_cerrar_caja(self):
+        respuesta = self.client.get(self.url("cerrar"), follow=True)
+        self.assertRedirects(respuesta, self.url("caja"))
+        self.assertIn("No hay caja abierta para cerrar.", self.mensajes(respuesta))
+
+        self.abrir(h(0), base=50000)
+        self.cuenta_cerrada(h(1), 20000, Pago.EFECTIVO)
+        Cuenta.objects.create(identificador="Mesa 9")
+
+        respuesta = self.client.get(self.url("cerrar"))
+        self.assertEqual(respuesta.context["esperado"], 70000)
+        self.assertContains(respuesta, "Mesa 9")
+        self.assertContains(respuesta, 'name="efectivo_contado"')
+        cifras = respuesta.context["resumen"].cifras
+
+        respuesta = self.client.post(self.url("cerrar"), {"efectivo_contado": ""})
+        self.assertContains(respuesta, "Cuenta el efectivo antes de cerrar.")
+        self.assertIsNotNone(caja_abierta())
+
+        respuesta = self.client.post(
+            self.url("cerrar"),
+            {"efectivo_contado": "67000", "cifras_previas": cifras, "observaciones": "Todo normal"},
+            follow=True,
+        )
+        cierre = CierreCaja.objects.get(pk=respuesta.context["cierre"].pk)
+        self.assertRedirects(respuesta, self.url("cierre", cierre.pk))
+        self.assertEqual((cierre.efectivo_contado, cierre.diferencia), (67000, -3000))
+        self.assertEqual(cierre.observaciones, "Todo normal")
+        self.assertEqual(cierre.cuentas_abiertas_al_cerrar, 1)
+        mensajes = self.mensajes(respuesta)
+        self.assertIn("Caja cerrada: faltan $ 3.000.", mensajes)
+        self.assertFalse(any("cambiaron" in m for m in mensajes))
+
+        # Si las cifras cambiaron entre abrir la pantalla y confirmar, se avisa.
+        abrir_caja(0)
+        respuesta = self.client.post(
+            self.url("cerrar"), {"efectivo_contado": "0", "cifras_previas": "1-1-1-1"}, follow=True
+        )
+        self.assertTrue(any("cambiaron" in m for m in self.mensajes(respuesta)))
+
+    # 6
+    def test_registrar_gasto(self):
+        self.abrir(h(0))
+        datos = {
+            "categoria": CatGasto.SERVICIOS,
+            "descripcion": "Hielo",
+            "monto": "8000",
+            "pagado_con_caja": "on",
+            "fecha": "",
+        }
+        respuesta = self.client.post(self.url("gasto_nuevo"), datos, follow=True)
+        self.assertRedirects(respuesta, self.url("caja"))
+        self.assertIn("Gasto registrado: $ 8.000 (Servicios: Hielo).", self.mensajes(respuesta))
+        self.assertEqual(respuesta.context["resumen"].gastos_efectivo, 8000)
+
+        respuesta = self.client.post(
+            self.url("gasto_nuevo"), dict(datos, descripcion="", monto="0")
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertTrue(respuesta.context["form"].errors["descripcion"])
+        self.assertTrue(respuesta.context["form"].errors["monto"])
+        self.assertEqual(Gasto.objects.count(), 1)
+
+        self.cerrar(h(8))
+        respuesta = self.client.post(
+            self.url("gasto_nuevo"),
+            dict(datos, descripcion="Hielo del sábado", fecha="2025-03-14T20:00"),
+        )
+        self.assertContains(respuesta, "jornada ya cerrada")
+        self.assertContains(respuesta, 'value="Hielo del sábado"')
+        self.assertEqual(Gasto.objects.count(), 1)
+
+    # 7
+    def test_historial_y_detalle_de_cierres(self):
+        self.abrir(h(0))
+        self.cuenta_cerrada(h(1), 10000, Pago.EFECTIVO)
+        primero = self.cerrar(h(8), contado=9000)  # faltan 1.000
+        self.abrir(h(10))
+        segundo = self.cerrar(h(12), contado=500)  # sobran 500
+
+        respuesta = self.client.get(self.url("cierres"))
+        self.assertEqual(list(respuesta.context["pagina"]), [segundo, primero])
+        self.assertEqual(respuesta.context["total_diferencias"], -500)
+        self.assertContains(respuesta, "text-danger")
+        self.assertContains(respuesta, "text-success")
+
+        respuesta = self.client.get(self.url("cierre", primero.pk))
+        self.assertContains(respuesta, "Faltaron")
+        self.assertContains(respuesta, "$ 1.000")
+        self.assertContains(respuesta, "Cuenta 0")
+        self.assertEqual(list(respuesta.context["detalle"].cuentas_cobradas), list(Cuenta.objects.all()))
+
+    # 8
+    def test_abrir_no_acepta_get(self):
+        self.assertEqual(self.client.get(self.url("abrir")).status_code, 405)
+        self.assertIsNone(caja_abierta())
+
+    # 9
+    def test_tablero_de_ventas_enlaza_a_abrir_caja(self):
+        enlace = f'href="{self.url("caja")}?siguiente=/ventas/"'
+        respuesta = self.client.get(reverse("ventas:tablero"))
+        self.assertContains(respuesta, enlace)
+
+        abrir_caja(50000)
+        respuesta = self.client.get(reverse("ventas:tablero"))
+        self.assertNotContains(respuesta, 'id="abrir-caja"')
+        self.assertNotContains(respuesta, "No hay caja abierta")

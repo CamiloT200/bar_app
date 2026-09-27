@@ -1,0 +1,45 @@
+{% load formato %}
+{# Lo que explica las cifras: cuentas cobradas, compras y gastos pagados con caja. #}
+<div class="row g-3">
+  <div class="col-lg-6">
+    <h2 class="h5">Cuentas cobradas</h2>
+    <ul class="list-group">
+      {% for cuenta in detalle.cuentas_cobradas %}
+        <li class="list-group-item d-flex gap-2">
+          <span class="text-body-secondary text-nowrap">{{ cuenta.cerrada_en|time:"g:i a" }}</span>
+          <a href="{% url 'ventas:cuenta' cuenta.pk %}" class="me-auto link-light">{{ cuenta.identificador }}</a>
+          <span class="text-body-secondary">{{ cuenta.get_metodo_pago_display|default:"sin cobro" }}</span>
+          <span class="text-nowrap">{{ cuenta.total|pesos }}</span>
+        </li>
+      {% empty %}
+        <li class="list-group-item text-body-secondary">Ninguna.</li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="col-lg-6">
+    <h2 class="h5">Compras pagadas con caja</h2>
+    <ul class="list-group mb-3">
+      {% for compra in detalle.compras_con_caja %}
+        <li class="list-group-item d-flex gap-2">
+          <span class="text-body-secondary text-nowrap">{{ compra.fecha|time:"g:i a" }}</span>
+          <a href="{% url 'inventario:compra' compra.pk %}" class="me-auto link-light">{{ compra.proveedor.nombre|default:"Sin proveedor" }}</a>
+          <span class="text-nowrap">{{ compra.total|pesos }}</span>
+        </li>
+      {% empty %}
+        <li class="list-group-item text-body-secondary">Ninguna.</li>
+      {% endfor %}
+    </ul>
+    <h2 class="h5">Gastos pagados con caja</h2>
+    <ul class="list-group">
+      {% for gasto in detalle.gastos_con_caja %}
+        <li class="list-group-item d-flex gap-2">
+          <span class="text-body-secondary text-nowrap">{{ gasto.fecha|time:"g:i a" }}</span>
+          <span class="me-auto">{{ gasto.get_categoria_display }}: {{ gasto.descripcion }}</span>
+          <span class="text-nowrap">{{ gasto.monto|pesos }}</span>
+        </li>
+      {% empty %}
+        <li class="list-group-item text-body-secondary">Ninguno.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>

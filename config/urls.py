@@ -22,5 +22,6 @@ urlpatterns = [
     path('', RedirectView.as_view(pattern_name='ventas:tablero'), name='inicio'),
     path('ventas/', include('ventas.urls')),
     path('inventario/', include('inventario.urls')),
+    path('finanzas/', include('finanzas.urls')),
     path('admin/', admin.site.urls),
 ]

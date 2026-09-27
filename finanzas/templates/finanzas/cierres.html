@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load formato %}
+{% block titulo %}Cierres de caja{% endblock %}
+{% block nav_finanzas %}active{% endblock %}
+
+{% block contenido %}
+{% include "finanzas/_pestanas.html" with activa="cierres" %}
+<h1 class="h3 mb-3">Cierres de caja</h1>
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle fs-5">
+    <thead>
+      <tr>
+        <th>Jornada</th><th class="text-end">Base</th><th class="text-end">Ventas ef.</th><th class="text-end">Otros</th>
+        <th class="text-end">Compras</th><th class="text-end">Gastos</th><th class="text-end">Esperado</th>
+        <th class="text-end">Contado</th><th class="text-end">Diferencia</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cierre in pagina %}
+        <tr>
+          <td class="text-nowrap"><a href="{% url 'finanzas:cierre' cierre.pk %}" class="link-light">
+            {{ cierre.abierto_en|date:"j M" }} {{ cierre.abierto_en|time:"g:i a" }} → {{ cierre.cerrado_en|date:"j M" }} {{ cierre.cerrado_en|time:"g:i a" }}</a></td>
+          <td class="text-end text-nowrap">{{ cierre.base_inicial|pesos }}</td>
+          <td class="text-end text-nowrap">{{ cierre.ventas_efectivo|pesos }}</td>
+          <td class="text-end text-nowrap">{{ cierre.ventas_otros_medios|pesos }}</td>
+          <td class="text-end text-nowrap">{{ cierre.compras_efectivo|pesos }}</td>
+          <td class="text-end text-nowrap">{{ cierre.gastos_efectivo|pesos }}</td>
+          <td class="text-end text-nowrap">{{ cierre.efectivo_esperado|pesos }}</td>
+          <td class="text-end text-nowrap">{{ cierre.efectivo_contado|pesos }}</td>
+          <td class="text-end text-nowrap fw-bold {% if cierre.diferencia < 0 %}text-danger{% elif cierre.diferencia > 0 %}text-success{% else %}text-body-secondary{% endif %}">
+            {{ cierre.diferencia|pesos }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="9" class="text-center text-body-secondary py-4">Todavía no hay cierres.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if pagina.object_list %}
+      <tfoot>
+        <tr>
+          <th colspan="2">Totales de esta página</th>
+          <th colspan="2" class="text-end text-nowrap">Ventas {{ total_ventas|pesos }}</th>
+          <th colspan="4"></th>
+          <th class="text-end text-nowrap {% if total_diferencias < 0 %}text-danger{% elif total_diferencias > 0 %}text-success{% endif %}">{{ total_diferencias|pesos }}</th>
+        </tr>
+      </tfoot>
+    {% endif %}
+  </table>
+</div>
+
+{% if pagina.has_other_pages %}
+  <nav class="d-flex gap-2 align-items-center">
+    {% if pagina.has_previous %}<a href="?pagina={{ pagina.previous_page_number }}" class="btn btn-outline-secondary text-body btn-tactil"><i class="bi bi-chevron-left"></i> Más recientes</a>{% endif %}
+    <span class="text-body-secondary mx-2">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+    {% if pagina.has_next %}<a href="?pagina={{ pagina.next_page_number }}" class="btn btn-outline-secondary text-body btn-tactil">Más antiguos <i class="bi bi-chevron-right"></i></a>{% endif %}
+  </nav>
+{% endif %}
+{% endblock %}

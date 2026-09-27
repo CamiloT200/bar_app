@@ -20,8 +20,9 @@
   {% include "_campo.html" with campo=form.pagada_con_caja %}
   <p class="form-text fs-6 mt-n2">Si está marcada, resta del efectivo esperado en el cierre de caja.</p>
   {% if not hay_caja_abierta %}
-    <div class="alert alert-warning py-2" id="aviso-sin-caja">
-      <i class="bi bi-exclamation-triangle"></i> No hay caja abierta: si se paga con caja, entrará en la próxima jornada.
+    <div class="alert alert-warning py-2 d-flex align-items-center gap-3" id="aviso-sin-caja">
+      <span class="me-auto"><i class="bi bi-exclamation-triangle"></i> No hay caja abierta: si se paga con caja, entrará en la próxima jornada.</span>
+      <a href="{% url 'finanzas:caja' %}?siguiente={{ request.path|urlencode }}" class="btn btn-warning btn-tactil">Abrir caja</a>
     </div>
   {% endif %}
 

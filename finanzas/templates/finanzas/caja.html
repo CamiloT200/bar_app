@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% load formato %}
+{% block titulo %}Caja{% endblock %}
+{% block nav_finanzas %}active{% endblock %}
+
+{% block contenido %}
+{% include "finanzas/_pestanas.html" with activa="caja" %}
+
+{% if caja %}
+  <div class="d-flex flex-wrap align-items-baseline gap-3 mb-3">
+    <h1 class="h2 mb-0 me-auto">
+      <i class="bi bi-unlock text-success"></i> Caja abierta
+      <span class="fs-5 text-body-secondary">· jornada desde {{ caja.abierto_en|date:"j M" }} {{ caja.abierto_en|time:"g:i a" }} (hace {{ caja.abierto_en|timesince }})</span>
+    </h1>
+    <span class="fs-4">Base {{ caja.base_inicial|pesos }}</span>
+  </div>
+
+  {% include "finanzas/_resumen.html" with ve=resumen.ventas_efectivo vo=resumen.ventas_otros_medios ce=resumen.compras_efectivo ge=resumen.gastos_efectivo %}
+
+  <div class="card mb-3 border-primary-subtle">
+    <div class="card-body d-flex flex-wrap align-items-center gap-3">
+      <span class="fs-4 text-body-secondary me-auto">EFECTIVO ESPERADO EN EL CAJÓN AHORA</span>
+      <span class="total-enorme">{{ esperado|pesos }}</span>
+    </div>
+  </div>
+
+  {% if cuentas_abiertas %}
+    <div class="alert alert-warning fs-5 py-2">
+      <i class="bi bi-exclamation-triangle"></i>
+      {{ cuentas_abiertas|length }} cuenta{{ cuentas_abiertas|length|pluralize }} abierta{{ cuentas_abiertas|length|pluralize }}:
+      {% for cuenta in cuentas_abiertas %}<a href="{% url 'ventas:cuenta' cuenta.pk %}" class="alert-link">{{ cuenta.identificador }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}.
+      <span class="fs-6">No bloquean el cierre.</span>
+    </div>
+  {% endif %}
+
+  <div class="d-flex flex-wrap gap-3 mb-4">
+    <a href="{% url 'finanzas:gasto_nuevo' %}" class="btn btn-outline-secondary text-body btn-lg btn-tactil"><i class="bi bi-plus-lg"></i> Registrar gasto</a>
+    <a href="{% url 'finanzas:cerrar' %}" class="btn btn-primary btn-lg btn-tactil ms-auto"><i class="bi bi-lock"></i> Cerrar caja</a>
+  </div>
+
+  <h2 class="h4">Movimientos de la jornada</h2>
+  {% include "finanzas/_detalle_ventana.html" %}
+
+{% else %}
+  <div class="card mb-4">
+    <div class="card-body">
+      <h1 class="h2"><i class="bi bi-lock"></i> La caja está cerrada</h1>
+      <p class="fs-5 text-body-secondary">
+        {% if desde %}Último cierre: {{ desde|date:"j M" }} {{ desde|time:"g:i a" }}.{% else %}Aún no se ha abierto ninguna caja.{% endif %}
+      </p>
+      <form method="post" action="{% url 'finanzas:abrir' %}" class="d-flex flex-wrap gap-2 align-items-end">
+        {% csrf_token %}
+        <input type="hidden" name="siguiente" value="{{ siguiente }}">
+        <div>
+          <label for="base_inicial" class="form-label fs-5">Base inicial (efectivo en el cajón)</label>
+          <input type="number" name="base_inicial" id="base_inicial" min="0" step="1000" inputmode="numeric" required
+                 class="form-control form-control-tactil" autofocus>
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg btn-tactil"><i class="bi bi-unlock"></i> Abrir caja</button>
+      </form>
+    </div>
+  </div>
+
+  {% if resumen.ventas_efectivo or resumen.ventas_otros_medios or resumen.compras_efectivo or resumen.gastos_efectivo %}
+    <h2 class="h4">Pendiente para la próxima jornada <span class="fs-6 text-body-secondary">(desde el último cierre)</span></h2>
+    <p class="text-body-secondary">Lo que se registre con la caja cerrada entra en la próxima jornada al abrirla.</p>
+    {% include "finanzas/_resumen.html" with ve=resumen.ventas_efectivo vo=resumen.ventas_otros_medios ce=resumen.compras_efectivo ge=resumen.gastos_efectivo %}
+  {% endif %}
+{% endif %}
+{% endblock %}

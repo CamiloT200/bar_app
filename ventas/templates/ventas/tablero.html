@@ -5,9 +5,11 @@
 
 {% block contenido %}
 {% if not hay_caja_abierta %}
-  <div class="alert alert-warning fs-5 py-2">
-    <i class="bi bi-exclamation-triangle"></i>
-    No hay caja abierta: lo que cobres entrará en la próxima jornada.
+  <div class="alert alert-warning fs-5 py-2 d-flex align-items-center gap-3">
+    <span class="me-auto"><i class="bi bi-exclamation-triangle"></i>
+      No hay caja abierta: lo que cobres entrará en la próxima jornada.</span>
+    <a href="{% url 'finanzas:caja' %}?siguiente={{ request.path|urlencode }}" class="btn btn-warning btn-tactil" id="abrir-caja">
+      <i class="bi bi-unlock"></i> Abrir caja</a>
   </div>
 {% endif %}
 

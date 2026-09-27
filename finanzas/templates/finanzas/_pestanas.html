@@ -1,0 +1,5 @@
+<ul class="nav nav-pills mb-3 fs-5">
+  <li class="nav-item"><a class="nav-link {% if activa == 'caja' %}active{% endif %}" href="{% url 'finanzas:caja' %}"><i class="bi bi-safe"></i> Caja</a></li>
+  <li class="nav-item"><a class="nav-link {% if activa == 'gastos' %}active{% endif %}" href="{% url 'finanzas:gasto_nuevo' %}"><i class="bi bi-receipt-cutoff"></i> Gastos</a></li>
+  <li class="nav-item"><a class="nav-link {% if activa == 'cierres' %}active{% endif %}" href="{% url 'finanzas:cierres' %}"><i class="bi bi-journal-check"></i> Cierres</a></li>
+</ul>

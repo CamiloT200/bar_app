@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% load formato %}
+{% block titulo %}Cerrar caja{% endblock %}
+{% block nav_finanzas %}active{% endblock %}
+
+{% block contenido %}
+{% include "finanzas/_pestanas.html" with activa="caja" %}
+<div class="d-flex align-items-center gap-3 mb-3">
+  <a href="{% url 'finanzas:caja' %}" class="btn btn-secondary btn-tactil"><i class="bi bi-arrow-left"></i> Caja</a>
+  <h1 class="h2 mb-0">Cerrar caja <span class="fs-5 text-body-secondary">jornada desde {{ caja.abierto_en|date:"j M" }} {{ caja.abierto_en|time:"g:i a" }}</span></h1>
+</div>
+
+{% include "finanzas/_resumen.html" with ve=resumen.ventas_efectivo vo=resumen.ventas_otros_medios ce=resumen.compras_efectivo ge=resumen.gastos_efectivo %}
+
+{% if cuentas_abiertas %}
+  <div class="alert alert-warning fs-5 py-2">
+    <i class="bi bi-exclamation-triangle"></i>
+    Quedan {{ cuentas_abiertas|length }} cuenta{{ cuentas_abiertas|length|pluralize }} abierta{{ cuentas_abiertas|length|pluralize }}
+    ({% for cuenta in cuentas_abiertas %}{{ cuenta.identificador }}{% if not forloop.last %}, {% endif %}{% endfor %}):
+    su dinero entrará en la jornada en que se cobren. Puedes cerrar igual.
+  </div>
+{% endif %}
+
+<form method="post" action="{% url 'finanzas:cerrar' %}" id="form-cerrar">
+  {% csrf_token %}
+  {% for error in form.non_field_errors %}<div class="alert alert-danger fs-5 py-2">{{ error }}</div>{% endfor %}
+  {% for error in form.efectivo_contado.errors %}<div class="alert alert-danger fs-5 py-2">{{ error }}</div>{% endfor %}
+  <input type="hidden" name="efectivo_contado" id="efectivo_contado" value="">
+  <input type="hidden" name="cifras_previas" value="{{ resumen.cifras }}">
+
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <h2 class="h4">Contar el efectivo</h2>
+      {# Solo se envía el total (campo oculto). Estos campos no tienen name. #}
+      <table class="table align-middle fs-5 mb-2" id="conteo">
+        <thead><tr><th>Billete</th><th style="width: 9rem">Cantidad</th><th class="text-end">Subtotal</th></tr></thead>
+        <tbody>
+          {% for billete in billetes %}
+            <tr>
+              <td class="text-nowrap">{{ billete|pesos }}</td>
+              <td><input type="number" min="0" step="1" inputmode="numeric" class="form-control form-control-tactil denominacion"
+                         data-valor="{{ billete }}" aria-label="Cantidad de billetes de {{ billete|pesos }}"></td>
+              <td class="text-end text-nowrap subtotal"></td>
+            </tr>
+          {% endfor %}
+          <tr>
+            <td>Monedas y sueltos</td>
+            <td><input type="number" min="0" step="50" inputmode="numeric" class="form-control form-control-tactil"
+                       id="monedas" placeholder="$" aria-label="Monto en monedas y sueltos"></td>
+            <td class="text-end text-nowrap subtotal" id="subtotal-monedas"></td>
+          </tr>
+        </tbody>
+      </table>
+      <label for="observaciones" class="form-label fs-5">Observaciones (opcional)</label>
+      <textarea name="observaciones" id="observaciones" rows="2" class="form-control fs-5">{{ form.observaciones.value|default_if_none:'' }}</textarea>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card detalle-fijo">
+        <div class="card-body fs-4">
+          <div class="d-flex justify-content-between"><span class="text-body-secondary">Base inicial</span><span>{{ caja.base_inicial|pesos }}</span></div>
+          <div class="d-flex justify-content-between"><span class="text-body-secondary">Efectivo esperado</span>
+            <span class="fw-bold" id="esperado" data-esperado="{{ esperado }}">{{ esperado|pesos }}</span></div>
+          <div class="d-flex justify-content-between"><span class="text-body-secondary">Efectivo contado</span>
+            <span class="fw-bold" id="contado">—</span></div>
+          <hr>
+          <div class="total-grande text-center" id="diferencia" aria-live="polite">Cuenta el efectivo</div>
+        </div>
+        <div class="card-footer">
+          <button type="button" class="btn btn-primary btn-lg btn-tactil w-100 fs-3" id="boton-cerrar" disabled
+                  data-bs-toggle="modal" data-bs-target="#modal-cerrar">
+            <i class="bi bi-lock"></i> Cerrar caja
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+
+<div class="modal fade" id="modal-cerrar" tabindex="-1" aria-labelledby="titulo-cerrar" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h2 class="modal-title h4" id="titulo-cerrar">¿Cerrar la jornada?</h2></div>
+      <div class="modal-body fs-5">
+        <p>Contado: <strong id="modal-contado"></strong> · <span id="modal-diferencia"></span></p>
+        <p class="mb-0 text-warning">No se puede deshacer.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-tactil" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" form="form-cerrar" class="btn btn-primary btn-tactil"><i class="bi bi-lock"></i> Sí, cerrar caja</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Suma las denominaciones en vivo y llena el único campo que se envía.
+  (function () {
+    var pesos = window.formatoPesos;
+    var esperado = parseInt(document.getElementById("esperado").dataset.esperado, 10);
+    var oculto = document.getElementById("efectivo_contado");
+    var monedas = document.getElementById("monedas");
+    var denominaciones = document.querySelectorAll(".denominacion");
+    var contado = document.getElementById("contado");
+    var diferencia = document.getElementById("diferencia");
+    var boton = document.getElementById("boton-cerrar");
+
+    function entero(input) {
+      var n = parseInt(input.value, 10);
+      return isNaN(n) || n < 0 ? 0 : n;
+    }
+
+    function textoDiferencia(d) {
+      if (d < 0) return { texto: "Faltan " + pesos(-d), clase: "text-danger" };
+      if (d > 0) return { texto: "Sobran " + pesos(d), clase: "text-success" };
+      return { texto: "Cuadra exacto", clase: "text-body-secondary" };
+    }
+
+    function recalcular() {
+      var total = 0, algo = monedas.value !== "";
+      denominaciones.forEach(function (input) {
+        var sub = entero(input) * parseInt(input.dataset.valor, 10);
+        input.closest("tr").querySelector(".subtotal").textContent = input.value !== "" ? pesos(sub) : "";
+        if (input.value !== "") algo = true;
+        total += sub;
+      });
+      total += entero(monedas);
+      document.getElementById("subtotal-monedas").textContent = monedas.value !== "" ? pesos(entero(monedas)) : "";
+
+      if (!algo) {
+        oculto.value = "";
+        contado.textContent = "—";
+        diferencia.textContent = "Cuenta el efectivo";
+        diferencia.className = "total-grande text-center";
+        boton.disabled = true;
+        return;
+      }
+      var d = textoDiferencia(total - esperado);
+      oculto.value = total;
+      contado.textContent = pesos(total);
+      diferencia.textContent = d.texto;
+      diferencia.className = "total-grande text-center " + d.clase;
+      boton.disabled = false;
+      document.getElementById("modal-contado").textContent = pesos(total);
+      document.getElementById("modal-diferencia").textContent = d.texto;
+      document.getElementById("modal-diferencia").className = d.clase;
+    }
+
+    document.getElementById("conteo").addEventListener("input", recalcular);
+    // Enter en un campo no debe enviar el formulario sin pasar por la confirmación.
+    document.getElementById("conteo").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") e.preventDefault();
+    });
+    recalcular();
+  })();
+</script>
+{% endblock %}

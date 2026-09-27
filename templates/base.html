@@ -19,7 +19,9 @@
         <li class="nav-item">
           <a class="nav-link {% block nav_inventario %}{% endblock %}" href="{% url 'inventario:productos' %}"><i class="bi bi-box-seam"></i> Inventario</a>
         </li>
-        <li class="nav-item"><span class="nav-link disabled" aria-disabled="true"><i class="bi bi-cash-stack"></i> Finanzas</span></li>
+        <li class="nav-item">
+          <a class="nav-link {% block nav_finanzas %}{% endblock %}" href="{% url 'finanzas:caja' %}"><i class="bi bi-cash-stack"></i> Finanzas</a>
+        </li>
       </ul>
     </div>
   </nav>

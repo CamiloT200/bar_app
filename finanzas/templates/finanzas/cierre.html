@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load formato %}
+{% block titulo %}Cierre de caja{% endblock %}
+{% block nav_finanzas %}active{% endblock %}
+
+{% block contenido %}
+{% include "finanzas/_pestanas.html" with activa="cierres" %}
+<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+  <a href="{% url 'finanzas:cierres' %}" class="btn btn-secondary btn-tactil"><i class="bi bi-arrow-left"></i> Cierres</a>
+  <h1 class="h2 mb-0">Jornada {{ cierre.abierto_en|date:"j M" }} {{ cierre.abierto_en|time:"g:i a" }} → {{ cierre.cerrado_en|date:"j M" }} {{ cierre.cerrado_en|time:"g:i a" }}</h1>
+</div>
+
+{% include "finanzas/_resumen.html" with ve=cierre.ventas_efectivo vo=cierre.ventas_otros_medios ce=cierre.compras_efectivo ge=cierre.gastos_efectivo %}
+
+<div class="row g-3 mb-3">
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100"><div class="card-body fs-4">
+      <div class="d-flex justify-content-between"><span class="text-body-secondary">Base inicial</span><span>{{ cierre.base_inicial|pesos }}</span></div>
+      <div class="d-flex justify-content-between"><span class="text-body-secondary">Esperado</span><span>{{ cierre.efectivo_esperado|pesos }}</span></div>
+      <div class="d-flex justify-content-between"><span class="text-body-secondary">Contado</span><span>{{ cierre.efectivo_contado|pesos }}</span></div>
+      <hr>
+      <div class="total-grande text-center {% if cierre.diferencia < 0 %}text-danger{% elif cierre.diferencia > 0 %}text-success{% else %}text-body-secondary{% endif %}">
+        {% if cierre.diferencia < 0 %}Faltaron{% elif cierre.diferencia > 0 %}Sobraron{% else %}Cuadró exacto{% endif %}
+        {% if cierre.diferencia %}{{ cierre.diferencia|pesos|cut:"-" }}{% endif %}
+      </div>
+    </div></div>
+  </div>
+  <div class="col-md-6 col-xl-8">
+    {% if cierre.advertencia %}<div class="alert alert-warning fs-5 py-2"><i class="bi bi-exclamation-triangle"></i> {{ cierre.advertencia }}</div>{% endif %}
+    {% if cierre.observaciones %}
+      <div class="card"><div class="card-body"><h2 class="h5">Observaciones</h2><p class="mb-0 fs-5">{{ cierre.observaciones|linebreaksbr }}</p></div></div>
+    {% endif %}
+  </div>
+</div>
+
+<h2 class="h4">Movimientos de la jornada</h2>
+{% include "finanzas/_detalle_ventana.html" %}
+{% endblock %}

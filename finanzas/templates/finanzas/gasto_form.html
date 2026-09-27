@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block titulo %}Registrar gasto{% endblock %}
+{% block nav_finanzas %}active{% endblock %}
+
+{% block contenido %}
+{% include "finanzas/_pestanas.html" with activa="gastos" %}
+<div class="row justify-content-center">
+  <div class="col-lg-8 col-xl-6">
+    <h1 class="h2 mb-3">Registrar gasto</h1>
+
+    {% if not hay_caja_abierta %}
+      <div class="alert alert-warning fs-5 py-2 d-flex align-items-center gap-3">
+        <span class="me-auto"><i class="bi bi-exclamation-triangle"></i> No hay caja abierta: si se paga con caja, entrará en la próxima jornada.</span>
+        <a href="{% url 'finanzas:caja' %}?siguiente={{ request.path|urlencode }}" class="btn btn-warning btn-tactil">Abrir caja</a>
+      </div>
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="alert alert-danger fs-5 py-2">{{ error }}</div>{% endfor %}
+
+      <div class="mb-3">
+        <span class="form-label fs-5 d-block">Categoría</span>
+        <div class="d-flex flex-wrap gap-2" role="group" aria-label="Categoría">
+          {% for valor, etiqueta in form.fields.categoria.choices %}
+            <input type="radio" class="btn-check" name="categoria" id="categoria-{{ valor }}" value="{{ valor }}" autocomplete="off" required
+                   {% if valor == categoria_elegida %}checked{% endif %}>
+            <label class="btn btn-outline-light btn-lg btn-tactil" for="categoria-{{ valor }}">{{ etiqueta }}</label>
+          {% endfor %}
+        </div>
+        {% for error in form.categoria.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+      </div>
+
+      {% include "_campo.html" with campo=form.descripcion %}
+      {% include "_campo.html" with campo=form.monto %}
+      {% include "_campo.html" with campo=form.pagado_con_caja %}
+      <p class="form-text fs-6 mt-n2">Si está activo, resta del efectivo esperado en el cierre de caja.</p>
+      {% include "_campo.html" with campo=form.fecha %}
+
+      <div class="d-flex gap-3 mt-4">
+        <a href="{% url 'finanzas:caja' %}" class="btn btn-secondary btn-lg btn-tactil flex-fill">Cancelar</a>
+        <button type="submit" class="btn btn-primary btn-lg btn-tactil flex-fill"><i class="bi bi-check-lg"></i> Registrar gasto</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
