@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load formato %}
+{% block titulo %}Cuentas abiertas{% endblock %}
+{% block nav_ventas %}active{% endblock %}
+
+{% block contenido %}
+{% if not hay_caja_abierta %}
+  <div class="alert alert-warning fs-5 py-2">
+    <i class="bi bi-exclamation-triangle"></i>
+    No hay caja abierta: lo que cobres entrará en la próxima jornada.
+  </div>
+{% endif %}
+
+<div class="d-flex flex-wrap align-items-center gap-3 mb-4">
+  <h1 class="h2 mb-0 me-auto">Cuentas abiertas</h1>
+  <form method="post" action="{% url 'ventas:abrir' %}" class="d-flex gap-2">
+    {% csrf_token %}
+    <input type="text" name="identificador" class="form-control form-control-tactil"
+           placeholder="Mesa 3, Don Jorge…" maxlength="100" required autocomplete="off"
+           aria-label="Nombre de la cuenta">
+    <button type="submit" class="btn btn-primary btn-tactil text-nowrap">
+      <i class="bi bi-plus-lg"></i> Abrir cuenta
+    </button>
+  </form>
+</div>
+
+{% if cuentas %}
+  <div class="row g-3">
+    {% for cuenta in cuentas %}
+      <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+        <div class="card tarjeta-cuenta h-100 border-primary-subtle">
+          <div class="card-body d-flex flex-column">
+            <a href="{% url 'ventas:cuenta' cuenta.pk %}" class="stretched-link text-reset text-decoration-none">
+              <div class="fs-3 fw-bold text-truncate">{{ cuenta.identificador }}</div>
+            </a>
+            <div class="total-grande mt-auto">{{ cuenta.subtotal|pesos }}</div>
+            <div class="text-body-secondary">
+              abierta {{ cuenta.abierta_en|time:"g:i a" }} · {{ cuenta.unidades }} unidad{{ cuenta.unidades|pluralize:"es" }}
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="text-center text-body-secondary py-5 fs-4">
+    <i class="bi bi-inbox display-4 d-block mb-2"></i>
+    No hay cuentas abiertas.
+  </div>
+{% endif %}
+{% endblock %}

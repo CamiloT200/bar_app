@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load formato %}
+{% block titulo %}Cobrar {{ cuenta.identificador }}{% endblock %}
+{% block nav_ventas %}active{% endblock %}
+
+{% block contenido %}
+<div class="row justify-content-center">
+  <div class="col-lg-9 col-xl-7">
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <a href="{% url 'ventas:cuenta' cuenta.pk %}" class="btn btn-secondary btn-tactil"><i class="bi bi-arrow-left"></i> Volver a la cuenta</a>
+      <h1 class="h2 mb-0 text-truncate">Cobrar {{ cuenta.identificador }}</h1>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body text-center">
+        <div class="fs-4 text-body-secondary">Total</div>
+        <div class="total-enorme" id="total" data-total="{{ total }}">{{ total|pesos }}</div>
+      </div>
+    </div>
+
+    <form method="post" action="{% url 'ventas:cobrar' cuenta.pk %}">
+      {% csrf_token %}
+      {% if total > 0 %}
+        <div class="card mb-3">
+          <div class="card-body">
+            <label for="recibido" class="form-label fs-5">Recibido en efectivo (opcional, solo para calcular vueltas)</label>
+            <input type="number" id="recibido" min="0" step="1000" inputmode="numeric"
+                   class="form-control form-control-tactil" autocomplete="off">
+            <div class="d-flex flex-wrap gap-2 mt-2">
+              {% for billete in billetes %}
+                <button type="button" class="btn btn-outline-secondary text-body btn-tactil" data-billete="{{ billete }}">{{ billete|pesos }}</button>
+              {% endfor %}
+            </div>
+            <div class="fs-3 mt-3" id="vueltas" aria-live="polite"></div>
+          </div>
+        </div>
+
+        <div class="row g-2">
+          {% for valor, etiqueta, icono in metodos %}
+            <div class="col-6 col-md-4">
+              <button type="submit" name="metodo_pago" value="{{ valor }}"
+                      class="btn btn-primary btn-lg w-100 py-4 fs-4">
+                <i class="bi {{ icono }} d-block fs-2"></i>{{ etiqueta }}
+              </button>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="fs-5 text-body-secondary text-center">La cuenta no tiene consumo.</p>
+        <button type="submit" class="btn btn-primary btn-lg btn-tactil w-100 fs-4">Cerrar sin cobro</button>
+      {% endif %}
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Vueltas: ayuda en pantalla, no se guarda.
+  (function () {
+    var total = parseInt(document.getElementById("total").dataset.total, 10);
+    var recibido = document.getElementById("recibido");
+    var vueltas = document.getElementById("vueltas");
+    if (!recibido) return;
+
+    function pesos(valor) {
+      return "$ " + Math.abs(valor).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    }
+    function calcular() {
+      var valor = parseInt(recibido.value, 10);
+      if (isNaN(valor)) { vueltas.textContent = ""; vueltas.className = "fs-3 mt-3"; return; }
+      var diferencia = valor - total;
+      vueltas.textContent = diferencia >= 0 ? "Vueltas: " + pesos(diferencia) : "Falta: " + pesos(diferencia);
+      vueltas.className = "fs-3 mt-3 fw-bold " + (diferencia >= 0 ? "text-success" : "text-danger");
+    }
+    recibido.addEventListener("input", calcular);
+    // Enter aquí enviaría el formulario con el primer botón (Efectivo) y
+    // cerraría la cuenta sin querer: el cobro exige tocar un método de pago.
+    recibido.addEventListener("keydown", function (evento) {
+      if (evento.key === "Enter") evento.preventDefault();
+    });
+    document.querySelectorAll("[data-billete]").forEach(function (boton) {
+      boton.addEventListener("click", function () {
+        recibido.value = boton.dataset.billete;
+        calcular();
+      });
+    });
+  })();
+</script>
+{% endblock %}

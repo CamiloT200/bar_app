@@ -1,0 +1,42 @@
+/* Tamaños táctiles: todo lo que se toca mide al menos 56 px de alto. */
+html { font-size: 18px; }
+
+.btn-tactil { min-height: 56px; padding-left: 1.25rem; padding-right: 1.25rem; font-size: 1.15rem; }
+.btn-cuadrado { width: 56px; height: 56px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+.form-control-tactil { min-height: 56px; font-size: 1.25rem; }
+
+.total-grande { font-size: 2.6rem; font-weight: 700; line-height: 1.1; }
+.total-enorme { font-size: 3.5rem; font-weight: 700; line-height: 1.1; }
+
+/* Tablero */
+.tarjeta-cuenta { min-height: 130px; transition: transform .05s; }
+.tarjeta-cuenta:active { transform: scale(.98); }
+
+/* Selector de productos */
+.grilla-productos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 8px;
+}
+.btn-producto {
+  min-height: 96px;
+  display: flex; flex-direction: column; justify-content: space-between; align-items: stretch;
+  text-align: left; padding: .5rem .6rem; line-height: 1.15;
+}
+.btn-producto .nombre { font-weight: 600; font-size: 1rem; }
+.btn-producto .precio { font-size: .95rem; opacity: .85; }
+.btn-producto .stock { align-self: flex-end; font-size: .85rem; }
+
+.grupo-cantidad .btn { min-width: 56px; min-height: 56px; line-height: 1.05; }
+.grupo-cantidad .etiqueta { display: block; font-size: .7rem; opacity: .8; }
+
+.pestanas-categoria .btn { min-height: 48px; }
+
+/* Detalle de la cuenta: siempre visible al lado del selector. */
+@media (min-width: 992px) {
+  .detalle-fijo { position: sticky; top: 1rem; }
+}
+.fila-item { min-height: 64px; }
+
+/* Evitar doble toque: el formulario enviado se atenúa. */
+form.enviando button { opacity: .6; pointer-events: none; }

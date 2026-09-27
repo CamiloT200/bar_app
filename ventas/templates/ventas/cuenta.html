@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load static formato %}
+{% block titulo %}{{ cuenta.identificador }}{% endblock %}
+{% block nav_ventas %}active{% endblock %}
+
+{% block mensajes %}
+  {% for mensaje in messages %}
+    <div class="alert alert-{{ mensaje.tags }} fs-5 py-2 d-flex align-items-center gap-3" role="alert">
+      <span class="me-auto">{% if mensaje.level_tag == "success" %}<i class="bi bi-check-lg"></i> {% endif %}{{ mensaje }}</span>
+      {% if mensaje.level_tag == "success" and deshacer %}
+        <form method="post" action="{% url 'ventas:quitar' deshacer.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-light btn-tactil">
+            <i class="bi bi-arrow-counterclockwise"></i> Deshacer
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  {% endfor %}
+{% endblock %}
+
+{% block contenido %}
+<div class="d-flex align-items-center gap-3 mb-3">
+  <a href="{% url 'ventas:tablero' %}" class="btn btn-secondary btn-tactil"><i class="bi bi-arrow-left"></i> Cuentas</a>
+  <h1 class="h2 mb-0 text-truncate">{{ cuenta.identificador }}</h1>
+  {% if not cuenta.esta_abierta %}<span class="badge text-bg-secondary fs-6">Cerrada</span>{% endif %}
+</div>
+
+<div class="row g-3">
+  {% if cuenta.esta_abierta %}
+  <div class="col-lg-8">
+    {% include "ventas/_selector_productos.html" %}
+  </div>
+  <div class="col-lg-4">
+  {% else %}
+  <div class="col-lg-6 col-xl-5">
+  {% endif %}
+    <div class="detalle-fijo">
+      {% include "ventas/_detalle_cuenta.html" %}
+    </div>
+  </div>
+</div>
+
+{% if cuenta.esta_abierta %}
+<div class="modal fade" id="modal-quitar" tabindex="-1" aria-labelledby="titulo-quitar" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h4" id="titulo-quitar">Quitar de la cuenta</h2>
+      </div>
+      <div class="modal-body">
+        <p class="fs-4 mb-0" id="texto-quitar"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-tactil" data-bs-dismiss="modal">Cancelar</button>
+        <form method="post" id="form-quitar" action="">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger btn-tactil"><i class="bi bi-dash-circle"></i> Quitar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if cuenta.esta_abierta %}<script src="{% static 'js/cuenta.js' %}"></script>{% endif %}
+{% endblock %}

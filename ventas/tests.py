@@ -3,6 +3,7 @@ from unittest import mock
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.urls import reverse
 
 from inventario.models import Categoria, MovimientoInventario, Producto
 from inventario.servicios import registrar_movimiento_manual
@@ -271,3 +272,191 @@ class RestriccionesCuentaTests(BaseVentas):
                         cerrada_en=None if campos["estado"] == Estado.ABIERTA else self.mesa.abierta_en,
                         **campos,
                     )
+
+
+# ---------------------------------------------------------------------------
+# Interfaz web
+# ---------------------------------------------------------------------------
+
+
+class CodigoStockInsuficienteTests(BaseVentas):
+    # 10 (vistas)
+    def test_error_de_stock_lleva_codigo_y_datos(self):
+        self.cargar_stock(self.aguila, 1)
+        with self.assertRaises(ValidationError) as ctx:
+            agregar_item(self.mesa, self.aguila, 3)
+        error = ctx.exception
+        self.assertEqual(error.code, "stock_insuficiente")
+        self.assertEqual(error.params["stock"], 1)
+        self.assertEqual(error.params["cantidad"], 3)
+        self.assertEqual(error.params["faltante"], 2)
+        self.assertIn("hay 1, se piden 3", error.messages[0])
+
+
+class VistasVentasTests(BaseVentas):
+    def url(self, nombre, *args):
+        return reverse(f"ventas:{nombre}", args=args)
+
+    def mensajes(self, respuesta):
+        return [str(m) for m in respuesta.context["messages"]]
+
+    # 1
+    def test_tablero_muestra_solo_cuentas_abiertas_con_su_total(self):
+        self.cargar_stock(self.aguila, 10)
+        agregar_item(self.mesa, self.aguila, 2)
+        retirado = agregar_item(self.mesa, self.aguila, 1)
+        quitar_item(retirado)
+        cerrada = abrir_cuenta("Barra")
+        cerrar_cuenta(cerrada)
+
+        respuesta = self.client.get(self.url("tablero"))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(list(respuesta.context["cuentas"]), [self.mesa])
+        self.assertEqual(respuesta.context["cuentas"][0].subtotal, 8000)
+        self.assertContains(respuesta, "$ 8.000")
+        self.assertNotContains(respuesta, "Barra")
+
+    # 2
+    def test_abrir_cuenta_redirige_y_repetida_muestra_error(self):
+        respuesta = self.client.post(self.url("abrir"), {"identificador": "Mesa 7"})
+        nueva = Cuenta.objects.get(identificador="Mesa 7")
+        self.assertRedirects(respuesta, self.url("cuenta", nueva.pk))
+
+        respuesta = self.client.post(self.url("abrir"), {"identificador": "mesa 7"}, follow=True)
+        self.assertRedirects(respuesta, self.url("tablero"))
+        self.assertIn("Ya hay una cuenta abierta llamada mesa 7.", self.mensajes(respuesta))
+        self.assertEqual(Cuenta.objects.filter(identificador__iexact="mesa 7").count(), 1)
+
+    # 3
+    def test_agregar_con_stock_crea_item_y_redirige(self):
+        self.cargar_stock(self.aguila, 10)
+        respuesta = self.client.post(
+            self.url("agregar", self.mesa.pk),
+            {"producto": self.aguila.pk, "cantidad": 6},
+            follow=True,
+        )
+        self.assertRedirects(respuesta, self.url("cuenta", self.mesa.pk))
+        item = ItemConsumo.objects.get()
+        self.assertEqual((item.cantidad, item.precio_unitario), (6, 4000))
+        self.assertIn("6 × Águila agregada(s)", self.mensajes(respuesta))
+        self.assertEqual(respuesta.context["deshacer"], item)
+        self.assertEqual(self.aguila.stock, 4)
+
+    # 4
+    def test_agregar_sin_stock_muestra_pantalla_de_forzar(self):
+        self.cargar_stock(self.aguila, 1)
+        respuesta = self.client.post(
+            self.url("agregar", self.mesa.pk), {"producto": self.aguila.pk, "cantidad": 3}
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertTemplateUsed(respuesta, "ventas/forzar.html")
+        self.assertEqual(respuesta.context["stock"], 1)
+        self.assertEqual(respuesta.context["faltante"], 2)
+        self.assertContains(respuesta, "ajuste de inventario de +2")
+        self.assertFalse(ItemConsumo.objects.exists())
+        self.assertEqual(self.aguila.stock, 1)
+
+    # 5
+    def test_forzar_exige_nota_y_con_nota_registra_ajuste(self):
+        self.cargar_stock(self.aguila, 1)
+        datos = {"producto": self.aguila.pk, "cantidad": 3, "forzar": "on", "nota": "   "}
+        respuesta = self.client.post(self.url("agregar", self.mesa.pk), datos)
+        self.assertTemplateUsed(respuesta, "ventas/forzar.html")
+        self.assertContains(respuesta, "requiere una nota")
+        self.assertFalse(ItemConsumo.objects.exists())
+
+        datos["nota"] = "Había en la nevera"
+        respuesta = self.client.post(self.url("agregar", self.mesa.pk), datos, follow=True)
+        self.assertRedirects(respuesta, self.url("cuenta", self.mesa.pk))
+        item = ItemConsumo.objects.get()
+        self.assertEqual(item.movimiento_ajuste.cantidad, 2)
+        self.assertEqual(item.movimiento_ajuste.nota, "Había en la nevera")
+        self.assertIn(
+            "3 × Águila agregada(s) (ajuste de inventario +2 registrado)", self.mensajes(respuesta)
+        )
+        self.assertEqual(self.aguila.stock, 0)
+
+    # 6
+    def test_quitar_item_redirige_y_sale_del_total(self):
+        self.cargar_stock(self.aguila, 10)
+        agregar_item(self.mesa, self.aguila, 2)
+        item = agregar_item(self.mesa, self.aguila, 3)
+        respuesta = self.client.post(self.url("quitar", item.pk), follow=True)
+        self.assertRedirects(respuesta, self.url("cuenta", self.mesa.pk))
+        self.assertEqual(respuesta.context["total"], 8000)
+        self.assertIn("Quitado: 3 × Águila", self.mensajes(respuesta))
+        self.assertEqual(self.aguila.stock, 8)
+
+    # 7
+    def test_cobrar_cierra_la_cuenta_y_sin_metodo_da_error(self):
+        self.cargar_stock(self.aguila, 10)
+        agregar_item(self.mesa, self.aguila, 2)
+
+        respuesta = self.client.post(self.url("cobrar", self.mesa.pk), {}, follow=True)
+        self.assertRedirects(respuesta, self.url("cobrar", self.mesa.pk))
+        self.assertIn(
+            "Una cuenta con consumo necesita método de pago para cerrarse.",
+            self.mensajes(respuesta),
+        )
+        self.mesa.refresh_from_db()
+        self.assertTrue(self.mesa.esta_abierta)
+
+        respuesta = self.client.post(
+            self.url("cobrar", self.mesa.pk), {"metodo_pago": Pago.NEQUI}, follow=True
+        )
+        self.assertRedirects(respuesta, self.url("tablero"))
+        self.assertIn("Mesa 3 cobrada: $ 8.000 en Nequi", self.mensajes(respuesta))
+        self.mesa.refresh_from_db()
+        self.assertEqual((self.mesa.estado, self.mesa.total), (Estado.CERRADA, 8000))
+
+    # 8
+    def test_cuenta_cerrada_es_de_solo_lectura(self):
+        self.cargar_stock(self.aguila, 10)
+        item = agregar_item(self.mesa, self.aguila, 2)
+        cerrar_cuenta(self.mesa, Pago.EFECTIVO)
+
+        respuesta = self.client.get(self.url("cuenta", self.mesa.pk))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertNotContains(respuesta, 'id="form-agregar"')
+        self.assertNotContains(respuesta, "COBRAR")
+        self.assertContains(respuesta, "Cobrada en Efectivo")
+
+        respuesta = self.client.post(
+            self.url("agregar", self.mesa.pk), {"producto": self.aguila.pk, "cantidad": 1}, follow=True
+        )
+        self.assertIn("La cuenta Mesa 3 ya está cerrada.", self.mensajes(respuesta))
+        respuesta = self.client.post(self.url("quitar", item.pk), follow=True)
+        self.assertIn("La cuenta Mesa 3 ya está cerrada.", self.mensajes(respuesta))
+        self.assertEqual(ItemConsumo.objects.count(), 1)
+        self.assertEqual(self.aguila.stock, 8)
+
+    # 9
+    def test_acciones_que_modifican_no_aceptan_get(self):
+        self.cargar_stock(self.aguila, 10)
+        item = agregar_item(self.mesa, self.aguila, 1)
+        for url in [
+            self.url("abrir"),
+            self.url("agregar", self.mesa.pk),
+            self.url("quitar", item.pk),
+        ]:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 405)
+        # Cobrar sí acepta GET, pero solo muestra la pantalla de pago.
+        respuesta = self.client.get(self.url("cobrar", self.mesa.pk))
+        self.assertTemplateUsed(respuesta, "ventas/cobrar.html")
+        self.mesa.refresh_from_db()
+        self.assertTrue(self.mesa.esta_abierta)
+        self.assertTrue(item.vigente)
+
+
+class FiltroPesosTests(TestCase):
+    """Extra: formato de dinero en las plantillas."""
+
+    def test_formato(self):
+        from .templatetags.formato import pesos
+
+        self.assertEqual(pesos(45000), "$ 45.000")
+        self.assertEqual(pesos(0), "$ 0")
+        self.assertEqual(pesos(1234567), "$ 1.234.567")
+        self.assertEqual(pesos(-1000), "-$ 1.000")
+        self.assertEqual(pesos(None), "")

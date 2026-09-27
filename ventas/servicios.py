@@ -41,15 +41,18 @@ def abrir_cuenta(identificador):
 def agregar_item(cuenta, producto, cantidad, forzar=False, nota_forzado=""):
     """Agrega un item a una cuenta abierta y descuenta el stock.
 
-    Si no hay stock suficiente se rechaza, salvo que `forzar=True`: entonces
-    se exige `nota_forzado` y se crea un AJUSTE positivo solo por el faltante,
+    Si no hay stock suficiente se rechaza con code="stock_insuficiente" (y
+    params stock, cantidad, faltante), salvo que `forzar=True`: entonces se
+    exige `nota_forzado` y se crea un AJUSTE positivo solo por el faltante,
     de modo que el stock queda exactamente en 0 tras la venta.
     """
     if not _es_entero_positivo(cantidad):
         raise ValidationError(f"Cantidad inválida: {cantidad}.")
     nota_forzado = nota_forzado.strip()
     if forzar and not nota_forzado:
-        raise ValidationError('"Vender de todos modos" requiere una nota.')
+        raise ValidationError(
+            '"Vender de todos modos" requiere una nota.', code="nota_requerida"
+        )
 
     with transaction.atomic():
         verificar_periodo_abierto(timezone.now())
@@ -63,7 +66,14 @@ def agregar_item(cuenta, producto, cantidad, forzar=False, nota_forzado=""):
         if faltante > 0:
             if not forzar:
                 raise ValidationError(
-                    f"Stock insuficiente de {producto}: hay {stock}, se piden {cantidad}."
+                    "Stock insuficiente de %(producto)s: hay %(stock)s, se piden %(cantidad)s.",
+                    code="stock_insuficiente",
+                    params={
+                        "producto": producto.nombre,
+                        "stock": stock,
+                        "cantidad": cantidad,
+                        "faltante": faltante,
+                    },
                 )
             ajuste = MovimientoInventario.objects.create(
                 producto=producto,

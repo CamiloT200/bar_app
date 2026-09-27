@@ -1,0 +1,64 @@
+{% load formato %}
+<div class="card">
+  <ul class="list-group list-group-flush">
+    {% for grupo in grupos %}
+      <li class="list-group-item d-flex align-items-center gap-2 fila-item">
+        <div class="me-auto">
+          <div class="fw-semibold fs-5">{{ grupo.producto.nombre }}</div>
+          <div class="text-body-secondary">{{ grupo.cantidad }} × {{ grupo.precio|pesos }}</div>
+        </div>
+        <div class="fs-5 text-nowrap">{{ grupo.subtotal|pesos }}</div>
+        {% if cuenta.esta_abierta %}
+          <button type="button" class="btn btn-outline-danger btn-cuadrado"
+                  data-bs-toggle="modal" data-bs-target="#modal-quitar"
+                  data-url="{% url 'ventas:quitar' grupo.ultimo.pk %}"
+                  data-texto="¿Quitar {{ grupo.ultimo.cantidad }} × {{ grupo.producto.nombre }} agregada(s) a las {{ grupo.ultimo.fecha|time:'g:i a' }}?"
+                  aria-label="Quitar {{ grupo.producto.nombre }}">
+            <i class="bi bi-dash-lg"></i>
+          </button>
+        {% endif %}
+      </li>
+    {% empty %}
+      <li class="list-group-item text-body-secondary fs-5 py-4 text-center">Sin consumo todavía.</li>
+    {% endfor %}
+  </ul>
+
+  {% if cuenta.esta_abierta and items|length > grupos|length %}
+    <details class="border-top px-3 py-2">
+      <summary class="py-2">Ver detalle por hora</summary>
+      <ul class="list-group list-group-flush">
+        {% for item in items %}
+          <li class="list-group-item d-flex align-items-center gap-2 px-0">
+            <span class="text-body-secondary text-nowrap">{{ item.fecha|time:"g:i a" }}</span>
+            <span class="me-auto">{{ item.cantidad }} × {{ item.producto.nombre }}</span>
+            <span class="text-nowrap">{{ item.subtotal|pesos }}</span>
+            <button type="button" class="btn btn-outline-danger btn-cuadrado"
+                    data-bs-toggle="modal" data-bs-target="#modal-quitar"
+                    data-url="{% url 'ventas:quitar' item.pk %}"
+                    data-texto="¿Quitar {{ item.cantidad }} × {{ item.producto.nombre }} agregada(s) a las {{ item.fecha|time:'g:i a' }}?"
+                    aria-label="Quitar este item">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </li>
+        {% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+
+  <div class="card-footer">
+    <div class="d-flex align-items-baseline justify-content-between mb-2">
+      <span class="fs-4 text-body-secondary">TOTAL</span>
+      <span class="total-grande" id="total-cuenta">{{ total|pesos }}</span>
+    </div>
+    {% if cuenta.esta_abierta %}
+      <a href="{% url 'ventas:cobrar' cuenta.pk %}" class="btn btn-primary btn-lg btn-tactil w-100 fs-3">
+        <i class="bi bi-cash-coin"></i> COBRAR
+      </a>
+    {% else %}
+      <div class="fs-5 text-body-secondary">
+        {% if cuenta.metodo_pago %}Cobrada en {{ cuenta.get_metodo_pago_display }}{% else %}Cerrada sin cobro{% endif %}
+        · {{ cuenta.cerrada_en|date:"j M" }} {{ cuenta.cerrada_en|time:"g:i a" }}
+      </div>
+    {% endif %}
+  </div>
+</div>

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block titulo %}Sin stock suficiente{% endblock %}
+{% block nav_ventas %}active{% endblock %}
+
+{% block contenido %}
+<div class="row justify-content-center">
+  <div class="col-lg-8 col-xl-6">
+    <div class="card border-warning">
+      <div class="card-header bg-warning-subtle fs-4">
+        <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+        Sin stock suficiente de <strong>{{ producto.nombre }}</strong>
+      </div>
+      <div class="card-body">
+        <p class="fs-4">
+          El sistema dice que hay <strong>{{ stock }}</strong> y estás pidiendo
+          <strong>{{ cantidad }}</strong> para <strong>{{ cuenta.identificador }}</strong>.
+        </p>
+        <p class="fs-5 text-body-secondary">
+          Si vendes de todos modos, se registrará un
+          <strong class="text-warning">ajuste de inventario de +{{ faltante }}</strong>
+          con la nota que escribas.
+        </p>
+
+        <form method="post" action="{% url 'ventas:agregar' cuenta.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="producto" value="{{ producto.pk }}">
+          <input type="hidden" name="cantidad" value="{{ cantidad }}">
+          <input type="hidden" name="forzar" value="on">
+
+          <label for="nota" class="form-label fs-5">Nota <span class="text-warning">(obligatoria)</span></label>
+          <textarea name="nota" id="nota" rows="2" maxlength="255" required autofocus
+                    class="form-control fs-5 {% if error %}is-invalid{% endif %}">{{ nota }}</textarea>
+          {% if error %}<div class="invalid-feedback fs-6">{{ error }}</div>{% endif %}
+
+          <div class="d-flex flex-wrap gap-2 mt-2 mb-4" aria-label="Motivos rápidos">
+            {% for motivo in motivos %}
+              <button type="button" class="btn btn-outline-secondary text-body btn-tactil" data-motivo="{{ motivo }}">{{ motivo }}</button>
+            {% endfor %}
+          </div>
+
+          <div class="d-flex gap-3">
+            <a href="{% url 'ventas:cuenta' cuenta.pk %}" class="btn btn-secondary btn-lg btn-tactil flex-fill">Cancelar</a>
+            <button type="submit" class="btn btn-warning btn-lg btn-tactil flex-fill">
+              <i class="bi bi-exclamation-triangle"></i> Vender de todos modos
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Los motivos rápidos rellenan la nota; se puede editar después.
+  document.querySelectorAll("[data-motivo]").forEach(function (boton) {
+    boton.addEventListener("click", function () {
+      var nota = document.getElementById("nota");
+      nota.value = boton.dataset.motivo;
+      nota.classList.remove("is-invalid");
+      nota.focus();
+    });
+  });
+</script>
+{% endblock %}
