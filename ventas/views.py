@@ -6,15 +6,16 @@ from django.core.exceptions import ValidationError
 from django.db.models import F, Q, Sum
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from finanzas.servicios import caja_abierta
 from inventario.models import Categoria, Producto
 from inventario.texto import ordenar_por_nombre
 
-from .forms import CANTIDADES_RAPIDAS, AbrirCuentaForm, AgregarItemForm, CobrarForm
-from .models import Cuenta, EstadoCuenta, ItemConsumo, MetodoPago
-from .servicios import abrir_cuenta, agregar_item, cerrar_cuenta, quitar_item
+from .forms import CANTIDADES_RAPIDAS, AbrirCuentaForm, AgregarItemForm, CobrarForm, MeseroForm
+from .models import Cuenta, EstadoCuenta, ItemConsumo, Mesero, MetodoPago
+from .servicios import abrir_cuenta, agregar_item, cerrar_cuenta, crear_mesero, quitar_item
 from .templatetags.formato import pesos
 
 SESION_DESHACER = "ventas_deshacer_item"
@@ -63,12 +64,20 @@ def tablero(request):
             ),
             unidades=Coalesce(Sum("items__cantidad", filter=vigentes), 0),
         )
+        .select_related("mesero")
         .order_by("abierta_en", "id")
     )
+    # Tras crear un mesero se vuelve aquí con ?mesero=<id> para dejarlo elegido.
+    mesero_elegido = request.GET.get("mesero", "")
     return render(
         request,
         "ventas/tablero.html",
-        {"cuentas": cuentas, "hay_caja_abierta": caja_abierta() is not None},
+        {
+            "cuentas": cuentas,
+            "hay_caja_abierta": caja_abierta() is not None,
+            "meseros": ordenar_por_nombre(Mesero.objects.filter(activo=True)),
+            "mesero_elegido": mesero_elegido if mesero_elegido.isdigit() else "",
+        },
     )
 
 
@@ -76,14 +85,32 @@ def tablero(request):
 def abrir(request):
     form = AbrirCuentaForm(request.POST)
     if not form.is_valid():
-        messages.error(request, "Escribe un nombre para la cuenta.")
+        if "mesero" in form.errors:
+            messages.error(request, "Ese mesero no existe o está inactivo.")
+        else:
+            messages.error(request, "Escribe un nombre para la cuenta.")
         return redirect("ventas:tablero")
     try:
-        nueva = abrir_cuenta(form.cleaned_data["identificador"])
+        nueva = abrir_cuenta(form.cleaned_data["identificador"], mesero=form.cleaned_data["mesero"])
     except ValidationError as e:
         messages.error(request, _primer_mensaje(e))
         return redirect("ventas:tablero")
     return redirect("ventas:cuenta", pk=nueva.pk)
+
+
+@require_POST
+def mesero_crear(request):
+    form = MeseroForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Escribe el ID y el nombre del mesero.")
+        return redirect("ventas:tablero")
+    try:
+        mesero = crear_mesero(form.cleaned_data["codigo"], form.cleaned_data["nombre"])
+    except ValidationError as e:
+        messages.error(request, _primer_mensaje(e))
+        return redirect("ventas:tablero")
+    messages.success(request, f"Mesero {mesero.nombre} ({mesero.codigo}) agregado.")
+    return redirect(f"{reverse('ventas:tablero')}?mesero={mesero.pk}")
 
 
 @require_GET

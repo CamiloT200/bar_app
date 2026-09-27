@@ -15,15 +15,46 @@
 
 <div class="d-flex flex-wrap align-items-center gap-3 mb-4">
   <h1 class="h2 mb-0 me-auto">Cuentas abiertas</h1>
-  <form method="post" action="{% url 'ventas:abrir' %}" class="d-flex gap-2">
+  <form method="post" action="{% url 'ventas:abrir' %}" class="d-flex flex-wrap gap-2">
     {% csrf_token %}
-    <input type="text" name="identificador" class="form-control form-control-tactil"
+    <input type="text" name="identificador" class="form-control form-control-tactil" style="width: 16rem"
            placeholder="Mesa 3, Don Jorge…" maxlength="100" required autocomplete="off"
            aria-label="Nombre de la cuenta">
+    <select name="mesero" class="form-select form-control-tactil" style="width: 14rem" aria-label="Mesero">
+      <option value="">— Sin mesero —</option>
+      {% for mesero in meseros %}
+        <option value="{{ mesero.pk }}" {% if mesero.pk|stringformat:"s" == mesero_elegido %}selected{% endif %}>{{ mesero.nombre }} ({{ mesero.codigo }})</option>
+      {% endfor %}
+    </select>
+    <button type="button" class="btn btn-outline-secondary text-body btn-tactil text-nowrap"
+            data-bs-toggle="modal" data-bs-target="#modal-mesero">
+      <i class="bi bi-person-plus"></i> Agregar mesero
+    </button>
     <button type="submit" class="btn btn-primary btn-tactil text-nowrap">
       <i class="bi bi-plus-lg"></i> Abrir cuenta
     </button>
   </form>
+</div>
+
+<div class="modal fade" id="modal-mesero" tabindex="-1" aria-labelledby="titulo-mesero" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" action="{% url 'ventas:mesero_crear' %}" class="modal-content">
+      {% csrf_token %}
+      <div class="modal-header"><h2 class="modal-title h4" id="titulo-mesero">Agregar mesero</h2></div>
+      <div class="modal-body">
+        <label for="mesero-codigo" class="form-label fs-5">ID del mesero</label>
+        <input type="text" name="codigo" id="mesero-codigo" maxlength="20" required autocomplete="off"
+               class="form-control form-control-tactil mb-3" placeholder="M01">
+        <label for="mesero-nombre" class="form-label fs-5">Nombre</label>
+        <input type="text" name="nombre" id="mesero-nombre" maxlength="100" required autocomplete="off"
+               class="form-control form-control-tactil" placeholder="Carlos Pérez">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-tactil" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary btn-tactil"><i class="bi bi-person-plus"></i> Agregar</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 {% if cuentas %}
@@ -35,6 +66,7 @@
             <a href="{% url 'ventas:cuenta' cuenta.pk %}" class="stretched-link text-reset text-decoration-none">
               <div class="fs-3 fw-bold text-truncate">{{ cuenta.identificador }}</div>
             </a>
+            {% if cuenta.mesero %}<div class="text-body-secondary"><i class="bi bi-person"></i> {{ cuenta.mesero.nombre }}</div>{% endif %}
             <div class="total-grande mt-auto">{{ cuenta.subtotal|pesos }}</div>
             <div class="text-body-secondary">
               abierta {{ cuenta.abierta_en|time:"g:i a" }} · {{ cuenta.unidades }} unidad{{ cuenta.unidades|pluralize:"es" }}

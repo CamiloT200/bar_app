@@ -2,7 +2,7 @@ from django import forms
 
 from inventario.models import Producto
 
-from .models import Cuenta, MetodoPago
+from .models import Cuenta, Mesero, MetodoPago
 
 # Cantidades rápidas del selector: (cantidad, etiqueta opcional), más "Otra".
 # Media y Canasta son solo cantidades, no productos ni precios especiales.
@@ -13,6 +13,12 @@ CANTIDAD_MAXIMA = 999
 
 class AbrirCuentaForm(forms.Form):
     identificador = forms.CharField(max_length=Cuenta._meta.get_field("identificador").max_length)
+    mesero = forms.ModelChoiceField(queryset=Mesero.objects.filter(activo=True), required=False)
+
+
+class MeseroForm(forms.Form):
+    codigo = forms.CharField(max_length=Mesero._meta.get_field("codigo").max_length)
+    nombre = forms.CharField(max_length=Mesero._meta.get_field("nombre").max_length)
 
 
 class AgregarItemForm(forms.Form):

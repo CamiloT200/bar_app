@@ -9,8 +9,8 @@ from acceso.pruebas import iniciar_sesion
 from inventario.models import Categoria, MovimientoInventario, Producto
 from inventario.servicios import registrar_movimiento_manual
 
-from .models import Cuenta, ItemConsumo
-from .servicios import abrir_cuenta, agregar_item, cerrar_cuenta, quitar_item
+from .models import Cuenta, ItemConsumo, Mesero
+from .servicios import abrir_cuenta, agregar_item, cerrar_cuenta, crear_mesero, quitar_item
 
 Tipo = MovimientoInventario.Tipo
 Estado = Cuenta.Estado
@@ -493,6 +493,66 @@ class CantidadesTests(BaseVentas):
                 if mensaje:
                     self.assertIn(mensaje, mensajes)
         self.assertFalse(ItemConsumo.objects.exists())
+
+
+class MeserosTests(BaseVentas):
+    def setUp(self):
+        super().setUp()
+        iniciar_sesion(self.client)
+
+    def mensajes(self, respuesta):
+        return [str(m) for m in respuesta.context["messages"]]
+
+    def test_crear_mesero_valida_id_unico_y_datos(self):
+        carlos = crear_mesero(" M01 ", "  Carlos   Pérez ")
+        self.assertEqual((carlos.codigo, carlos.nombre), ("M01", "Carlos Pérez"))
+        with self.assertRaises(ValidationError):
+            crear_mesero("m01", "Otro")  # mismo ID sin importar mayúsculas
+        for codigo, nombre in [("", "Ana"), ("M02", "   ")]:
+            with self.subTest(codigo=codigo, nombre=nombre), self.assertRaises(ValidationError):
+                crear_mesero(codigo, nombre)
+        self.assertEqual(Mesero.objects.count(), 1)
+
+    def test_abrir_cuenta_con_mesero_opcional(self):
+        ana = crear_mesero("M02", "Ana")
+        con_mesero = abrir_cuenta("Mesa 8", mesero=ana)
+        sin_mesero = abrir_cuenta("Barra")
+        self.assertEqual(con_mesero.mesero, ana)
+        self.assertIsNone(sin_mesero.mesero)
+
+        ana.activo = False
+        ana.save()
+        with self.assertRaises(ValidationError):
+            abrir_cuenta("Mesa 9", mesero=ana)
+
+    def test_agregar_mesero_desde_el_tablero_y_abrir_cuenta(self):
+        url_tablero = reverse("ventas:tablero")
+        respuesta = self.client.post(
+            reverse("ventas:mesero_crear"), {"codigo": "M03", "nombre": "Luis"}, follow=True
+        )
+        luis = Mesero.objects.get(codigo="M03")
+        self.assertRedirects(respuesta, f"{url_tablero}?mesero={luis.pk}")
+        self.assertIn("Mesero Luis (M03) agregado.", self.mensajes(respuesta))
+        # Queda elegido en el formulario de abrir cuenta.
+        self.assertContains(respuesta, f'<option value="{luis.pk}" selected>Luis (M03)</option>', html=True)
+
+        respuesta = self.client.post(
+            reverse("ventas:mesero_crear"), {"codigo": "m03", "nombre": "Otro"}, follow=True
+        )
+        self.assertIn("El ID m03 ya es de Luis.", self.mensajes(respuesta))
+
+        respuesta = self.client.post(
+            reverse("ventas:abrir"), {"identificador": "Mesa 10", "mesero": luis.pk}, follow=True
+        )
+        cuenta = Cuenta.objects.get(identificador="Mesa 10")
+        self.assertEqual(cuenta.mesero, luis)
+        self.assertContains(respuesta, "Luis")  # la pantalla de la cuenta muestra al mesero
+
+        respuesta = self.client.get(url_tablero)
+        self.assertContains(respuesta, '<i class="bi bi-person"></i> Luis', html=True)
+
+    def test_mesero_crear_no_acepta_get(self):
+        self.assertEqual(self.client.get(reverse("ventas:mesero_crear")).status_code, 405)
 
 
 class FiltroPesosTests(TestCase):

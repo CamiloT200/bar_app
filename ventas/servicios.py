@@ -11,7 +11,7 @@ from django.utils import timezone
 from finanzas.periodos import verificar_periodo_abierto
 from inventario.models import MovimientoInventario, TipoMovimiento
 
-from .models import Cuenta, EstadoCuenta, ItemConsumo, MetodoPago
+from .models import Cuenta, EstadoCuenta, ItemConsumo, Mesero, MetodoPago
 
 
 def _es_entero_positivo(valor):
@@ -26,16 +26,31 @@ def _cuenta_abierta(cuenta):
     return cuenta
 
 
-def abrir_cuenta(identificador):
+def abrir_cuenta(identificador, mesero=None):
+    """Abre una cuenta. El mesero es opcional (hay ventas sin mesero, como en la barra)."""
     identificador = identificador.strip()
     if not identificador:
         raise ValidationError("La cuenta necesita un identificador.")
+    if mesero is not None and not mesero.activo:
+        raise ValidationError(f"El mesero {mesero.nombre} está inactivo.")
     with transaction.atomic():
         if Cuenta.objects.filter(
             identificador__iexact=identificador, estado=EstadoCuenta.ABIERTA
         ).exists():
             raise ValidationError(f"Ya hay una cuenta abierta llamada {identificador}.")
-        return Cuenta.objects.create(identificador=identificador)
+        return Cuenta.objects.create(identificador=identificador, mesero=mesero)
+
+
+def crear_mesero(codigo, nombre):
+    """El ID del mesero es único sin importar mayúsculas ("m01" == "M01")."""
+    codigo, nombre = codigo.strip(), " ".join(nombre.split())
+    if not codigo or not nombre:
+        raise ValidationError("El mesero necesita ID y nombre.")
+    with transaction.atomic():
+        existente = Mesero.objects.filter(codigo__iexact=codigo).first()
+        if existente:
+            raise ValidationError(f"El ID {codigo} ya es de {existente.nombre}.")
+        return Mesero.objects.create(codigo=codigo, nombre=nombre)
 
 
 def agregar_item(cuenta, producto, cantidad, forzar=False, nota_forzado=""):

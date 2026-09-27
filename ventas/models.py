@@ -19,11 +19,29 @@ class MetodoPago(models.TextChoices):
     TRANSFERENCIA = "TRANSFERENCIA", "Transferencia"
 
 
+class Mesero(models.Model):
+    codigo = models.CharField(
+        "ID del mesero", max_length=20, unique=True, help_text='Código propio, ej. "M01".'
+    )
+    nombre = models.CharField(max_length=100)
+    activo = models.BooleanField(default=True, help_text="Los inactivos no aparecen al abrir cuentas.")
+
+    class Meta:
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.codigo})"
+
+
 class Cuenta(models.Model):
     Estado = EstadoCuenta
     MetodoPago = MetodoPago
 
     identificador = models.CharField(max_length=100, help_text='Texto libre, ej. "Mesa 3".')
+    # Opcional: también hay ventas sin mesero (por ejemplo, en la barra).
+    mesero = models.ForeignKey(
+        Mesero, on_delete=models.PROTECT, null=True, blank=True, related_name="cuentas"
+    )
     abierta_en = models.DateTimeField(default=timezone.now)
     cerrada_en = models.DateTimeField(null=True, blank=True)
     estado = models.CharField(
