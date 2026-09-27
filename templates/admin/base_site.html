@@ -1,0 +1,26 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{# Tema fijo de El Laboratorio: sin dark_mode.css ni el selector claro/oscuro del admin. #}
+{% block dark-mode-vars %}{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="icon" type="image/jpeg" href="{% static 'img/logo.jpeg' %}">
+  {# tema.css aporta la paleta (--lab-*); tema_admin.css la aplica a las variables del admin. #}
+  <link rel="stylesheet" href="{% static 'css/tema.css' %}">
+  <link rel="stylesheet" href="{% static 'css/tema_admin.css' %}">
+{% endblock %}
+
+{% block branding %}
+<div id="site-name">
+  <a href="{% url 'admin:index' %}" class="marca-admin">
+    <img src="{% static 'img/logo.jpeg' %}" alt="" height="40" width="40">
+    {{ site_header|default:_('Django administration') }}
+  </a>
+</div>
+{% endblock %}
+
+{% block nav-global %}{% endblock %}

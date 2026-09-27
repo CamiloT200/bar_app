@@ -18,6 +18,10 @@ from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import RedirectView
 
+admin.site.site_header = 'El Laboratorio · Administración'
+admin.site.site_title = 'El Laboratorio'
+admin.site.index_title = 'Administración de datos'
+
 urlpatterns = [
     path('', RedirectView.as_view(pattern_name='ventas:tablero'), name='inicio'),
     path('', include('acceso.urls')),

@@ -106,3 +106,16 @@ class AccesoTests(TestCase):
         self.assertNotEqual(self.client.session.session_key, clave_antes)
         # cycle_key conserva los datos, solo cambia la clave.
         self.assertEqual(self.client.session["marca"], "antes")
+
+    # Extra
+    def test_admin_usa_el_tema_de_el_laboratorio(self):
+        self.entrar()
+        # El admin conserva su propio login de Django.
+        respuesta = self.client.get("/admin/", follow=True)
+        self.assertRedirects(respuesta, "/admin/login/?next=/admin/")
+        self.assertContains(respuesta, "css/tema.css")
+        self.assertContains(respuesta, "css/tema_admin.css")
+        self.assertContains(respuesta, "img/logo.jpeg")
+        self.assertContains(respuesta, "El Laboratorio · Administración")
+        # Sin el modo claro/oscuro propio del admin, que competiría con el tema.
+        self.assertNotContains(respuesta, "admin/css/dark_mode.css")

@@ -1,0 +1,107 @@
+/* ==========================================================================
+   El Laboratorio Bar — tema del admin de Django.
+   La paleta (--lab-*) viene de tema.css; aquí solo se asigna a las variables
+   del admin. Mismas reglas de color que la app:
+     cian = acción principal (texto oscuro), rojo #ff453a = borrar/error,
+     gris claro = cancelar, verde neón solo en mensajes de éxito,
+     magenta/morado solo decoran.
+   ========================================================================== */
+
+:root,
+html[data-theme] {
+  --primary: #2b1845;              /* títulos de módulo: morado oscuro */
+  --secondary: var(--lab-superficie-2);
+  --accent: var(--lab-magenta);
+  --primary-fg: #ffffff;
+
+  --body-fg: var(--lab-texto);
+  --body-bg: var(--lab-fondo);
+  --body-quiet-color: var(--lab-texto-2);
+  --body-medium-color: #dcdce6;
+  --body-loud-color: #ffffff;
+
+  --header-color: var(--lab-texto-2);
+  --header-branding-color: #ffffff;
+  --header-bg: var(--lab-superficie);
+  --header-link-color: var(--lab-cian);
+
+  --breadcrumbs-fg: var(--lab-texto-2);
+  --breadcrumbs-link-fg: var(--lab-cian);
+  --breadcrumbs-bg: var(--lab-superficie-2);
+
+  --link-fg: var(--lab-cian);
+  --link-hover-color: #66e5ff;
+  --link-selected-fg: #c79bff;
+
+  --hairline-color: #23233a;
+  --border-color: var(--lab-borde);
+
+  --error-fg: var(--lab-rojo);
+
+  --message-success-bg: #0b2607;
+  --message-warning-bg: #3a2c05;
+  --message-error-bg: #2b0c0a;
+
+  --darkened-bg: var(--lab-superficie);
+  --selected-bg: var(--lab-superficie-2);
+  --selected-row: #06303a;
+
+  /* Acción principal: cian con texto oscuro. */
+  --button-fg: var(--lab-fondo);
+  --button-bg: var(--lab-cian);
+  --button-hover-bg: #5ce3ff;
+  --default-button-bg: var(--lab-cian);
+  --default-button-hover-bg: #5ce3ff;
+  /* Cancelar y herramientas: gris claro con texto oscuro. */
+  --close-button-bg: var(--lab-texto-2);
+  --close-button-hover-bg: #dcdce6;
+  /* Borrar: rojo anaranjado con texto oscuro (blanco no alcanza 4,5:1). */
+  --delete-button-bg: var(--lab-rojo);
+  --delete-button-hover-bg: #ff6b62;
+
+  --object-tools-fg: var(--lab-fondo);
+  --object-tools-bg: var(--close-button-bg);
+  --object-tools-hover-bg: var(--close-button-hover-bg);
+
+  color-scheme: dark;
+}
+
+/* --- Encabezado con el logo ------------------------------------------------ */
+#header {
+  border-bottom: 1px solid var(--lab-magenta);
+  box-shadow: 0 1px 12px rgba(var(--lab-magenta-rgb), 0.35);
+}
+#site-name a.marca-admin {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(var(--lab-magenta-rgb), 0.6);
+}
+#site-name a.marca-admin img { border-radius: 50%; }
+
+/* Tema fijo: el selector claro/oscuro del admin no aplica. */
+.theme-toggle { display: none; }
+
+/* --- Módulos y botones ------------------------------------------------------ */
+.module {
+  border: 1px solid rgba(var(--lab-morado-rgb), 0.35);
+  box-shadow: 0 0 10px rgba(var(--lab-morado-rgb), 0.12);
+}
+input[type="submit"].default,
+.submit-row input.default {
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(var(--lab-cian-rgb), 0.45);
+}
+
+/* Mensajes: éxito en verde neón (confirmación), error en rojo. */
+ul.messagelist li.success { border-left: 4px solid var(--lab-verde); }
+ul.messagelist li.warning { border-left: 4px solid #ffc107; }
+ul.messagelist li.error { border-left: 4px solid var(--lab-rojo); }
+
+/* Campos: foco en cian. */
+input:focus, select:focus, textarea:focus {
+  border-color: var(--lab-cian);
+  outline: 2px solid rgba(var(--lab-cian-rgb), 0.45);
+  outline-offset: 0;
+}
