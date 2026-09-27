@@ -136,7 +136,11 @@ def agregar(request, pk):
     cuenta = get_object_or_404(Cuenta, pk=pk)
     form = AgregarItemForm(request.POST)
     if not form.is_valid():
-        messages.error(request, "Producto o cantidad inválidos.")
+        errores_cantidad = form.errors.get("cantidad_otra") or form.errors.get("cantidad")
+        messages.error(
+            request,
+            f"Cantidad: {errores_cantidad[0]}" if errores_cantidad else "Producto o cantidad inválidos.",
+        )
         return redirect("ventas:cuenta", pk=cuenta.pk)
 
     producto = form.cleaned_data["producto"]

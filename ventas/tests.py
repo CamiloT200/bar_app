@@ -454,6 +454,47 @@ class VistasVentasTests(BaseVentas):
         self.assertTrue(item.vigente)
 
 
+class CantidadesTests(BaseVentas):
+    def setUp(self):
+        super().setUp()
+        iniciar_sesion(self.client)
+        self.cargar_stock(self.aguila, 100)
+        self.url_agregar = reverse("ventas:agregar", args=[self.mesa.pk])
+
+    def agregar(self, **datos):
+        return self.client.post(self.url_agregar, {"producto": self.aguila.pk, **datos}, follow=True)
+
+    def test_botones_de_cantidad_del_1_al_10_mas_15_30_y_otra(self):
+        respuesta = self.client.get(reverse("ventas:cuenta", args=[self.mesa.pk]))
+        for n in list(range(1, 11)) + [15, 30]:
+            self.assertContains(respuesta, f'id="cantidad-{n}" value="{n}"')
+        self.assertContains(respuesta, 'id="cantidad-otra" value="otra"')
+        self.assertContains(respuesta, 'name="cantidad_otra"')
+
+    def test_cantidad_rapida_y_otra_cantidad(self):
+        self.agregar(cantidad="7")
+        self.agregar(cantidad="otra", cantidad_otra="24")
+        self.assertEqual(
+            list(ItemConsumo.objects.order_by("id").values_list("cantidad", flat=True)), [7, 24]
+        )
+        self.assertEqual(self.aguila.stock, 100 - 7 - 24)
+
+    def test_otra_cantidad_vacia_o_invalida_no_agrega(self):
+        for datos, mensaje in [
+            ({"cantidad": "otra"}, "Cantidad: Escribe la cantidad."),
+            ({"cantidad": "otra", "cantidad_otra": "0"}, None),
+            ({"cantidad": "0"}, "Cantidad: La cantidad debe estar entre 1 y 999."),
+            ({"cantidad": "abc"}, "Cantidad: La cantidad debe estar entre 1 y 999."),
+        ]:
+            with self.subTest(datos=datos):
+                respuesta = self.agregar(**datos)
+                mensajes = [str(m) for m in respuesta.context["messages"]]
+                self.assertTrue(any(m.startswith("Cantidad:") for m in mensajes), mensajes)
+                if mensaje:
+                    self.assertIn(mensaje, mensajes)
+        self.assertFalse(ItemConsumo.objects.exists())
+
+
 class FiltroPesosTests(TestCase):
     """Extra: formato de dinero en las plantillas."""
 

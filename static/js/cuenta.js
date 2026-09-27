@@ -51,6 +51,22 @@
     });
   });
 
+  // "Otra" cantidad: escribir el número marca "Otra"; elegir otro botón lo borra.
+  var otra = document.getElementById("cantidad-otra");
+  var otraValor = document.getElementById("cantidad-otra-valor");
+  if (otra && otraValor) {
+    otraValor.addEventListener("input", function () { otra.checked = otraValor.value !== ""; });
+    otraValor.addEventListener("focus", function () { if (otraValor.value !== "") otra.checked = true; });
+    // Enter aquí enviaría el primer producto de la lista: se ignora.
+    otraValor.addEventListener("keydown", function (evento) {
+      if (evento.key === "Enter") evento.preventDefault();
+    });
+    otra.addEventListener("change", function () { otraValor.focus(); });
+    document.querySelectorAll("input[name=cantidad]").forEach(function (radio) {
+      if (radio !== otra) radio.addEventListener("change", function () { otraValor.value = ""; });
+    });
+  }
+
   // La ventana de quitar recibe la URL y el texto del botón que la abrió.
   var modal = document.getElementById("modal-quitar");
   if (modal) {

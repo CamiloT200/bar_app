@@ -25,6 +25,10 @@
         {{ cantidad }}{% if etiqueta %}<span class="etiqueta">{{ etiqueta }}</span>{% endif %}
       </label>
     {% endfor %}
+    <input type="radio" class="btn-check" name="cantidad" id="cantidad-otra" value="otra" autocomplete="off">
+    <label class="btn btn-outline-light" for="cantidad-otra">Otra</label>
+    <input type="number" name="cantidad_otra" id="cantidad-otra-valor" min="1" max="999" step="1" inputmode="numeric"
+           class="form-control form-control-tactil campo-cantidad-otra" placeholder="¿Cuántas?" aria-label="Otra cantidad">
   </div>
 
   <div class="grilla-productos" id="grilla-productos">
