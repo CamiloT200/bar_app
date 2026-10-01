@@ -51,8 +51,27 @@ def crear_mesero(codigo, nombre):
     with transaction.atomic():
         existente = Mesero.objects.filter(codigo__iexact=codigo).first()
         if existente:
-            raise ValidationError(f"El ID {codigo} ya es de {existente.nombre}.")
+            pista = "" if existente.activo else " (eliminado de la lista: se puede reactivar en el admin)"
+            raise ValidationError(f"El ID {codigo} ya es de {existente.nombre}{pista}.")
         return Mesero.objects.create(codigo=codigo, nombre=nombre)
+
+
+def eliminar_mesero(mesero):
+    """Saca a un mesero de la lista para abrir cuentas.
+
+    - Sin cuentas: se borra del todo; devuelve False.
+    - Con cuentas (abiertas o pasadas): se desactiva para que esas cuentas
+      conserven su nombre; devuelve True. Las cuentas abiertas que atiende
+      siguen con él hasta cobrarse.
+    """
+    with transaction.atomic():
+        mesero = Mesero.objects.get(pk=mesero.pk)
+        if not mesero.cuentas.exists():
+            mesero.delete()
+            return False
+        mesero.activo = False
+        mesero.save(update_fields=["activo"])
+        return True
 
 
 def agregar_item(cuenta, producto, cantidad, forzar=False, nota_forzado=""):

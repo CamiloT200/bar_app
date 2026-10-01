@@ -14,6 +14,11 @@
   // name/value del botón que se tocó, que ya quedó en los datos del envío.
   document.addEventListener("submit", function (evento) {
     var form = evento.target;
+    // Formularios con data-confirmar="¿…?" piden confirmación antes de enviarse.
+    if (form.dataset.confirmar && !form.dataset.enviando && !window.confirm(form.dataset.confirmar)) {
+      evento.preventDefault();
+      return;
+    }
     if (form.dataset.enviando) {
       evento.preventDefault();
       return;

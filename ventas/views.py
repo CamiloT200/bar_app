@@ -21,6 +21,7 @@ from .servicios import (
     cerrar_cuenta,
     crear_mesero,
     eliminar_cuenta,
+    eliminar_mesero,
     quitar_item,
 )
 from .templatetags.formato import pesos
@@ -118,6 +119,21 @@ def mesero_crear(request):
         return redirect("ventas:tablero")
     messages.success(request, f"Mesero {mesero.nombre} ({mesero.codigo}) agregado.")
     return redirect(f"{reverse('ventas:tablero')}?mesero={mesero.pk}")
+
+
+@require_POST
+def mesero_eliminar(request, pk):
+    mesero = get_object_or_404(Mesero, pk=pk)
+    conserva_historial = eliminar_mesero(mesero)
+    if conserva_historial:
+        messages.success(
+            request,
+            f"Mesero {mesero.nombre} eliminado de la lista. "
+            "Sus cuentas conservan su nombre.",
+        )
+    else:
+        messages.success(request, f"Mesero {mesero.nombre} eliminado.")
+    return redirect("ventas:tablero")
 
 
 @require_GET

@@ -16,6 +16,7 @@ from .servicios import (
     cerrar_cuenta,
     crear_mesero,
     eliminar_cuenta,
+    eliminar_mesero,
     quitar_item,
 )
 
@@ -560,6 +561,47 @@ class MeserosTests(BaseVentas):
 
     def test_mesero_crear_no_acepta_get(self):
         self.assertEqual(self.client.get(reverse("ventas:mesero_crear")).status_code, 405)
+
+    def test_eliminar_mesero_sin_cuentas_lo_borra(self):
+        ana = crear_mesero("M05", "Ana")
+        self.assertFalse(eliminar_mesero(ana))
+        self.assertFalse(Mesero.objects.filter(pk=ana.pk).exists())
+
+    def test_eliminar_mesero_con_cuentas_lo_saca_de_la_lista(self):
+        luis = crear_mesero("M06", "Luis")
+        abierta = abrir_cuenta("Mesa 20", mesero=luis)
+        self.assertTrue(eliminar_mesero(luis))
+        luis.refresh_from_db()
+        self.assertFalse(luis.activo)
+        abierta.refresh_from_db()
+        self.assertEqual(abierta.mesero, luis)  # la cuenta abierta lo conserva
+        with self.assertRaises(ValidationError):
+            abrir_cuenta("Mesa 21", mesero=luis)
+        with self.assertRaisesMessage(ValidationError, "se puede reactivar en el admin"):
+            crear_mesero("m06", "Otro")
+
+    def test_vista_eliminar_mesero(self):
+        luis = crear_mesero("M07", "Luis")
+        abrir_cuenta("Mesa 22", mesero=luis)
+        ana = crear_mesero("M08", "Ana")
+        url_tablero = reverse("ventas:tablero")
+        respuesta = self.client.get(url_tablero)
+        self.assertContains(respuesta, 'id="boton-eliminar-mesero"')
+        self.assertContains(respuesta, 'data-confirmar="¿Eliminar a Luis (M07)?"')
+
+        self.assertEqual(self.client.get(reverse("ventas:mesero_eliminar", args=[ana.pk])).status_code, 405)
+
+        respuesta = self.client.post(reverse("ventas:mesero_eliminar", args=[ana.pk]), follow=True)
+        self.assertRedirects(respuesta, url_tablero)
+        self.assertIn("Mesero Ana eliminado.", self.mensajes(respuesta))
+
+        respuesta = self.client.post(reverse("ventas:mesero_eliminar", args=[luis.pk]), follow=True)
+        self.assertIn(
+            "Mesero Luis eliminado de la lista. Sus cuentas conservan su nombre.", self.mensajes(respuesta)
+        )
+        # Ya no se ofrece al abrir cuentas, pero su cuenta abierta sigue mostrándolo.
+        self.assertNotContains(respuesta, f'<option value="{luis.pk}"')
+        self.assertContains(respuesta, '<i class="bi bi-person"></i> Luis', html=True)
 
 
 class EliminarCuentaTests(BaseVentas):
