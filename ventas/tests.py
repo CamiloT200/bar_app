@@ -9,7 +9,7 @@ from acceso.pruebas import iniciar_sesion
 from inventario.models import Categoria, MovimientoInventario, Producto
 from inventario.servicios import registrar_movimiento_manual
 
-from .models import Cuenta, ItemConsumo, Mesero
+from .models import METODO_MIXTO, Cuenta, ItemConsumo, Mesero, PagoCuenta
 from .servicios import (
     abrir_cuenta,
     agregar_item,
@@ -652,6 +652,90 @@ class EliminarCuentaTests(BaseVentas):
         self.assertNotContains(respuesta, 'id="boton-eliminar"')
         self.assertNotContains(respuesta, "COBRAR")
         self.assertNotContains(respuesta, 'id="form-agregar"')
+
+
+class PagoDivididoTests(BaseVentas):
+    def setUp(self):
+        super().setUp()
+        self.cargar_stock(self.aguila, 20)
+        agregar_item(self.mesa, self.aguila, 5)  # 20.000
+
+    def pagos(self, cuenta):
+        return {p.metodo: p.monto for p in cuenta.pagos.all()}
+
+    def test_un_solo_medio_crea_un_pago_por_el_total(self):
+        cuenta = cerrar_cuenta(self.mesa, Pago.NEQUI)
+        self.assertEqual(cuenta.metodo_pago, Pago.NEQUI)
+        self.assertEqual(self.pagos(cuenta), {Pago.NEQUI: 20000})
+
+    def test_pago_dividido_guarda_cada_parte_y_queda_mixto(self):
+        cuenta = cerrar_cuenta(
+            self.mesa, pagos={Pago.EFECTIVO: 8000, Pago.NEQUI: 12000, Pago.TARJETA: 0}
+        )
+        self.assertEqual(cuenta.metodo_pago, METODO_MIXTO)
+        self.assertEqual(cuenta.get_metodo_pago_display(), "Mixto")
+        self.assertEqual(self.pagos(cuenta), {Pago.EFECTIVO: 8000, Pago.NEQUI: 12000})
+        self.assertEqual(cuenta.total, 20000)
+
+    def test_dividido_con_un_solo_medio_no_es_mixto(self):
+        cuenta = cerrar_cuenta(self.mesa, pagos={Pago.DAVIPLATA: 20000, Pago.EFECTIVO: 0})
+        self.assertEqual(cuenta.metodo_pago, Pago.DAVIPLATA)
+
+    def test_pagos_que_no_cuadran_se_rechazan_sin_cerrar(self):
+        for pagos in [
+            {Pago.EFECTIVO: 8000, Pago.NEQUI: 10000},  # faltan
+            {Pago.EFECTIVO: 8000, Pago.NEQUI: 15000},  # sobran
+            {},
+            {Pago.EFECTIVO: -1000, Pago.NEQUI: 21000},
+            {"BITCOIN": 20000},
+        ]:
+            with self.subTest(pagos=pagos), self.assertRaises(ValidationError):
+                cerrar_cuenta(self.mesa, pagos=pagos)
+        self.mesa.refresh_from_db()
+        self.assertTrue(self.mesa.esta_abierta)
+        self.assertFalse(PagoCuenta.objects.exists())
+        with self.assertRaises(ValidationError):
+            cerrar_cuenta(self.mesa, Pago.EFECTIVO, pagos={Pago.EFECTIVO: 20000})
+
+    def test_la_caja_suma_cada_parte_en_su_medio(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from finanzas.servicios import resumen_ventana
+
+        inicio = timezone.now() - timedelta(minutes=1)
+        cerrar_cuenta(self.mesa, pagos={Pago.EFECTIVO: 8000, Pago.NEQUI: 12000})
+        otra = abrir_cuenta("Barra")
+        agregar_item(otra, self.aguila, 1)
+        cerrar_cuenta(otra, Pago.NEQUI)
+        resumen = resumen_ventana(inicio, timezone.now() + timedelta(minutes=1))
+        self.assertEqual(resumen.ventas_efectivo, 8000)
+        self.assertEqual(resumen.ventas_por_medio[Pago.NEQUI], 16000)
+        self.assertEqual(resumen.ventas_otros_medios, 16000)
+        self.assertEqual(resumen.ventas_totales, 24000)
+
+    def test_vista_cobrar_dividido(self):
+        iniciar_sesion(self.client)
+        url = reverse("ventas:cobrar", args=[self.mesa.pk])
+        respuesta = self.client.get(url)
+        self.assertContains(respuesta, 'name="pago_EFECTIVO"')
+        self.assertContains(respuesta, 'id="cobrar-dividido"')
+
+        respuesta = self.client.post(
+            url, {"dividido": "1", "pago_EFECTIVO": "5000", "pago_NEQUI": "5000"}, follow=True
+        )
+        self.assertIn("Los pagos suman 10000 y la cuenta es de 20000 (faltan 10000).",
+                      [str(m) for m in respuesta.context["messages"]])
+
+        respuesta = self.client.post(
+            url, {"dividido": "1", "pago_EFECTIVO": "5000", "pago_NEQUI": "15000"}, follow=True
+        )
+        self.assertRedirects(respuesta, reverse("ventas:tablero"))
+        self.assertIn("Mesa 3 cobrada: $ 20.000 (Efectivo $ 5.000 + Nequi $ 15.000)",
+                      [str(m) for m in respuesta.context["messages"]])
+        respuesta = self.client.get(reverse("ventas:cuenta", args=[self.mesa.pk]))
+        self.assertContains(respuesta, "Cobrada: Efectivo $ 5.000 + Nequi $ 15.000")
 
 
 class FiltroPesosTests(TestCase):

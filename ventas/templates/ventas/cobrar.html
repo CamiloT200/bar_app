@@ -24,6 +24,7 @@
         <div class="card mb-3">
           <div class="card-body">
             <label for="recibido" class="form-label fs-5">Recibido en efectivo (opcional, solo para calcular vueltas)</label>
+            <div class="form-text fs-6 mb-1" id="base-vueltas"></div>
             <input type="number" id="recibido" min="0" step="1000" inputmode="numeric"
                    class="form-control form-control-tactil" autocomplete="off">
             <div class="d-flex flex-wrap gap-2 mt-2">
@@ -35,6 +36,7 @@
           </div>
         </div>
 
+        <h2 class="h5 text-body-secondary">Todo con un solo medio</h2>
         <div class="row g-2">
           {% for valor, etiqueta, icono in metodos %}
             <div class="col-6 col-md-4">
@@ -44,6 +46,29 @@
               </button>
             </div>
           {% endfor %}
+        </div>
+
+        <div class="card mt-4" id="pago-dividido">
+          <div class="card-body">
+            <h2 class="h5 mb-3"><i class="bi bi-pie-chart"></i> Pago dividido</h2>
+            <p class="text-body-secondary mb-3">Escribe cuánto paga con cada medio. Solo se puede cobrar cuando la suma es exactamente el total.</p>
+            {% for valor, etiqueta, icono in metodos %}
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <label for="pago-{{ valor }}" class="fs-5 flex-grow-1"><i class="bi {{ icono }}"></i> {{ etiqueta }}</label>
+                <input type="number" name="pago_{{ valor }}" id="pago-{{ valor }}" min="0" step="100" inputmode="numeric"
+                       class="form-control form-control-tactil monto-dividido" style="max-width: 12rem"
+                       data-medio="{{ valor }}" placeholder="$ 0" autocomplete="off">
+                <button type="button" class="btn btn-outline-secondary text-body btn-tactil completar" data-medio="{{ valor }}"
+                        title="Completar con lo que falta">Resto</button>
+              </div>
+            {% endfor %}
+            <div class="d-flex flex-wrap align-items-center gap-3 mt-3">
+              <span class="fs-4" id="estado-dividido" aria-live="polite">Falta {{ total|pesos }}</span>
+              <button type="submit" name="dividido" value="1" class="btn btn-primary btn-lg btn-tactil ms-auto" id="cobrar-dividido" disabled>
+                <i class="bi bi-check2-all"></i> Cobrar dividido
+              </button>
+            </div>
+          </div>
         </div>
       {% else %}
         <p class="fs-5 text-body-secondary text-center">La cuenta no tiene consumo.</p>
@@ -56,29 +81,80 @@
 
 {% block scripts %}
 <script>
-  // Vueltas: ayuda en pantalla, no se guarda.
+  // Vueltas y pago dividido: ayudas en pantalla. El servidor vuelve a validar
+  // que el pago dividido sume exactamente el total.
   (function () {
     var total = parseInt(document.getElementById("total").dataset.total, 10);
     var recibido = document.getElementById("recibido");
     var vueltas = document.getElementById("vueltas");
     if (!recibido) return;
+    var pesos = window.formatoPesos;
+    var montos = Array.prototype.slice.call(document.querySelectorAll(".monto-dividido"));
+    var estado = document.getElementById("estado-dividido");
+    var botonDividido = document.getElementById("cobrar-dividido");
+    var baseVueltas = document.getElementById("base-vueltas");
 
-    function pesos(valor) {
-      return "$ " + Math.abs(valor).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    function entero(input) {
+      var n = parseInt(input.value, 10);
+      return isNaN(n) || n < 0 ? 0 : n;
     }
+    function asignado() {
+      return montos.reduce(function (suma, input) { return suma + entero(input); }, 0);
+    }
+    function efectivoDividido() {
+      var campo = document.querySelector('.monto-dividido[data-medio="EFECTIVO"]');
+      return campo && campo.value !== "" ? entero(campo) : null;
+    }
+
+    // Las vueltas se calculan sobre la parte en efectivo si hay pago dividido.
     function calcular() {
+      var base = efectivoDividido();
+      if (base === null) base = total;
+      baseVueltas.textContent = base === total ? "" : "Sobre la parte en efectivo: " + pesos(base);
       var valor = parseInt(recibido.value, 10);
       if (isNaN(valor)) { vueltas.textContent = ""; vueltas.className = "fs-3 mt-3"; return; }
-      var diferencia = valor - total;
-      vueltas.textContent = diferencia >= 0 ? "Vueltas: " + pesos(diferencia) : "Falta: " + pesos(diferencia);
+      var diferencia = valor - base;
+      vueltas.textContent = diferencia >= 0 ? "Vueltas: " + pesos(diferencia) : "Falta: " + pesos(-diferencia);
       vueltas.className = "fs-3 mt-3 fw-bold " + (diferencia >= 0 ? "text-success" : "text-danger");
     }
-    recibido.addEventListener("input", calcular);
-    // Enter aquí enviaría el formulario con el primer botón (Efectivo) y
-    // cerraría la cuenta sin querer: el cobro exige tocar un método de pago.
-    recibido.addEventListener("keydown", function (evento) {
-      if (evento.key === "Enter") evento.preventDefault();
+
+    function actualizarDividido() {
+      var falta = total - asignado();
+      var medios = montos.filter(function (input) { return entero(input) > 0; }).length;
+      if (falta > 0) {
+        estado.textContent = "Falta " + pesos(falta);
+        estado.className = "fs-4 text-warning";
+      } else if (falta < 0) {
+        estado.textContent = "Sobra " + pesos(-falta);
+        estado.className = "fs-4 text-danger";
+      } else {
+        estado.textContent = "Cuadra exacto";
+        estado.className = "fs-4 text-success";
+      }
+      // Dividido exige al menos dos medios: con uno solo se usa su botón.
+      botonDividido.disabled = falta !== 0 || medios < 2;
+      calcular();
+    }
+
+    montos.forEach(function (input) {
+      input.addEventListener("input", actualizarDividido);
     });
+    document.querySelectorAll(".completar").forEach(function (boton) {
+      boton.addEventListener("click", function () {
+        var campo = document.querySelector('.monto-dividido[data-medio="' + boton.dataset.medio + '"]');
+        var resto = total - (asignado() - entero(campo));
+        campo.value = resto > 0 ? resto : "";
+        actualizarDividido();
+      });
+    });
+    // Enter en cualquier campo enviaría el primer botón (Efectivo) y cerraría
+    // la cuenta sin querer: el cobro exige tocar un botón.
+    document.querySelectorAll("#recibido, .monto-dividido").forEach(function (campo) {
+      campo.addEventListener("keydown", function (evento) {
+        if (evento.key === "Enter") evento.preventDefault();
+      });
+    });
+    recibido.addEventListener("input", calcular);
     document.querySelectorAll("[data-billete]").forEach(function (boton) {
       boton.addEventListener("click", function () {
         recibido.value = boton.dataset.billete;

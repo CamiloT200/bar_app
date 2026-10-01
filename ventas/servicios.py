@@ -11,7 +11,7 @@ from django.utils import timezone
 from finanzas.periodos import verificar_periodo_abierto
 from inventario.models import MovimientoInventario, TipoMovimiento
 
-from .models import Cuenta, EstadoCuenta, ItemConsumo, Mesero, MetodoPago
+from .models import METODO_MIXTO, Cuenta, EstadoCuenta, ItemConsumo, Mesero, MetodoPago, PagoCuenta
 
 
 def _es_entero_positivo(valor):
@@ -170,21 +170,56 @@ def eliminar_cuenta(cuenta):
         return cuenta, devueltas
 
 
-def cerrar_cuenta(cuenta, metodo_pago=None):
-    """Fija el total y el método de pago. No toca el inventario."""
+def cerrar_cuenta(cuenta, metodo_pago=None, pagos=None):
+    """Fija el total y cómo se pagó. No toca el inventario.
+
+    - `metodo_pago`: todo el total con un solo medio (el caso normal).
+    - `pagos`: {medio: monto} para un pago dividido; deben sumar exactamente
+      el total. Se guardan como PagoCuenta, que es lo que suma la caja.
+    Cuenta.metodo_pago queda como resumen: el medio único o "Mixto".
+    """
+    if metodo_pago is not None and pagos is not None:
+        raise ValidationError("Indica un solo método de pago o un pago dividido, no ambos.")
     if metodo_pago is not None and metodo_pago not in MetodoPago.values:
         raise ValidationError(f"Método de pago inválido: {metodo_pago}.")
+    if pagos is not None:
+        pagos = {medio: monto for medio, monto in pagos.items() if monto}  # ignora medios en 0
+        for medio, monto in pagos.items():
+            if medio not in MetodoPago.values:
+                raise ValidationError(f"Método de pago inválido: {medio}.")
+            if not _es_entero_positivo(monto):
+                raise ValidationError(f"Monto inválido para {medio}: {monto}.")
 
     with transaction.atomic():
         verificar_periodo_abierto(timezone.now())
         cuenta = _cuenta_abierta(cuenta)
         total = cuenta.calcular_total()
-        if total > 0 and metodo_pago is None:
-            raise ValidationError("Una cuenta con consumo necesita método de pago para cerrarse.")
+
+        if pagos is None:
+            if total > 0 and metodo_pago is None:
+                raise ValidationError("Una cuenta con consumo necesita método de pago para cerrarse.")
+            pagos = {metodo_pago: total} if total > 0 else {}
+            resumen = metodo_pago
+        else:
+            suma = sum(pagos.values())
+            if suma != total:
+                diferencia = total - suma
+                detalle = f"faltan {diferencia}" if diferencia > 0 else f"sobran {-diferencia}"
+                raise ValidationError(
+                    f"Los pagos suman {suma} y la cuenta es de {total} ({detalle}).",
+                    code="pagos_no_cuadran",
+                )
+            if len(pagos) == 1:
+                resumen = next(iter(pagos))
+            else:
+                resumen = METODO_MIXTO if pagos else None
 
         cuenta.total = total
-        cuenta.metodo_pago = metodo_pago
+        cuenta.metodo_pago = resumen
         cuenta.cerrada_en = timezone.now()
         cuenta.estado = EstadoCuenta.CERRADA
         cuenta.save(update_fields=["total", "metodo_pago", "cerrada_en", "estado"])
+        PagoCuenta.objects.bulk_create(
+            PagoCuenta(cuenta=cuenta, metodo=medio, monto=monto) for medio, monto in pagos.items()
+        )
         return cuenta

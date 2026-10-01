@@ -1,0 +1,1 @@
+{% load formato %}{# Cómo se pagó una cuenta cerrada: el medio único, o el desglose si fue dividido. #}{% if cuenta.metodo_pago == "MIXTO" %}{% for pago in cuenta.pagos.all %}{{ pago.get_metodo_display }} {{ pago.monto|pesos }}{% if not forloop.last %} + {% endif %}{% endfor %}{% else %}{{ cuenta.get_metodo_pago_display|default:"sin cobro" }}{% endif %}

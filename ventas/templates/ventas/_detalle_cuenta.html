@@ -65,7 +65,7 @@
       </div>
     {% else %}
       <div class="fs-5 text-body-secondary">
-        {% if cuenta.metodo_pago %}Cobrada en {{ cuenta.get_metodo_pago_display }}{% else %}Cerrada sin cobro{% endif %}
+        {% if cuenta.metodo_pago == "MIXTO" %}Cobrada: {% include "ventas/_pagos.html" %}{% elif cuenta.metodo_pago %}Cobrada en {{ cuenta.get_metodo_pago_display }}{% else %}Cerrada sin cobro{% endif %}
         · {{ cuenta.cerrada_en|date:"j M" }} {{ cuenta.cerrada_en|time:"g:i a" }}
       </div>
     {% endif %}

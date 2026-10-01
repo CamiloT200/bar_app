@@ -11,7 +11,7 @@ from django.utils import timezone
 from acceso.pruebas import iniciar_sesion
 from inventario.models import Categoria, Compra, MovimientoInventario, Producto
 from inventario.servicios import LineaCompra, registrar_compra, registrar_movimiento_manual
-from ventas.models import Cuenta
+from ventas.models import Cuenta, PagoCuenta
 from ventas.servicios import abrir_cuenta, agregar_item, cerrar_cuenta, quitar_item
 
 from .models import CierreCaja, Gasto
@@ -53,8 +53,11 @@ class BaseFinanzas(TestCase):
             return cerrar_caja(contado)
 
     def cuenta_cerrada(self, cerrada_en, total, metodo_pago, abierta_en=None):
-        """Cuenta ya cobrada, creada por ORM para controlar sus fechas."""
-        return Cuenta.objects.create(
+        """Cuenta ya cobrada, creada por ORM para controlar sus fechas.
+
+        Como cerrar_cuenta, deja su PagoCuenta (lo que suma la caja).
+        """
+        cuenta = Cuenta.objects.create(
             identificador=f"Cuenta {Cuenta.objects.count()}",
             abierta_en=abierta_en or cerrada_en - timedelta(hours=1),
             cerrada_en=cerrada_en,
@@ -62,6 +65,9 @@ class BaseFinanzas(TestCase):
             total=total,
             metodo_pago=metodo_pago,
         )
+        if total:
+            PagoCuenta.objects.create(cuenta=cuenta, metodo=metodo_pago, monto=total)
+        return cuenta
 
     def gasto(self, fecha, monto, pagado_con_caja=True):
         return Gasto.objects.create(

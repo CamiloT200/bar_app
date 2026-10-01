@@ -20,6 +20,12 @@ class MetodoPago(models.TextChoices):
     TRANSFERENCIA = "TRANSFERENCIA", "Transferencia"
 
 
+# Cuenta.metodo_pago es un resumen: el medio único o "Mixto" si se dividió.
+# El detalle (fuente de verdad para la caja) está en PagoCuenta.
+METODO_MIXTO = "MIXTO"
+METODOS_CUENTA = MetodoPago.choices + [(METODO_MIXTO, "Mixto")]
+
+
 class Mesero(models.Model):
     codigo = models.CharField(
         "ID del mesero", max_length=20, unique=True, help_text='Código propio, ej. "M01".'
@@ -49,7 +55,7 @@ class Cuenta(models.Model):
         max_length=10, choices=EstadoCuenta.choices, default=EstadoCuenta.ABIERTA
     )
     metodo_pago = models.CharField(
-        max_length=15, choices=MetodoPago.choices, null=True, blank=True
+        max_length=15, choices=METODOS_CUENTA, null=True, blank=True
     )
     total = models.PositiveIntegerField(
         null=True, blank=True, help_text="Se fija al cerrar la cuenta."
@@ -171,3 +177,24 @@ class ItemConsumo(models.Model):
     @property
     def vigente(self):
         return self.retirado_en is None
+
+
+class PagoCuenta(models.Model):
+    """Una parte del pago de una cuenta cerrada. La suma de los pagos de una
+    cuenta es su total (lo garantiza cerrar_cuenta). Un medio por cuenta."""
+
+    cuenta = models.ForeignKey(Cuenta, on_delete=models.PROTECT, related_name="pagos")
+    metodo = models.CharField(max_length=15, choices=MetodoPago.choices)
+    monto = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ["id"]
+        verbose_name = "pago de cuenta"
+        verbose_name_plural = "pagos de cuentas"
+        constraints = [
+            models.CheckConstraint(condition=Q(monto__gt=0), name="pago_cuenta_monto_positivo"),
+            models.UniqueConstraint(fields=["cuenta", "metodo"], name="pago_cuenta_un_medio_por_cuenta"),
+        ]
+
+    def __str__(self):
+        return f"{self.get_metodo_display()} {self.monto} ({self.cuenta.identificador})"

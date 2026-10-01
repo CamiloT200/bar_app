@@ -15,7 +15,8 @@ ventas, compras, gastos y cierre de caja de un bar familiar.
 ## Estructura
 - `inventario/`: Producto, Categoria, Proveedor, Compra, DetalleCompra, MovimientoInventario
 - `ventas/`: Cuenta, ItemConsumo (cuentas abiertas por mesa/cliente), Mesero
-  (opcional en cada cuenta)
+  (opcional en cada cuenta), PagoCuenta (un pago por medio; permite pago
+  dividido y es lo que suma la caja)
 - `finanzas/`: Gasto, CierreCaja
 - `acceso/`: inicio de sesión de un solo usuario (sin modelos). Usuario y
   clave fijos en settings.py; `RequiereSesionMiddleware` protege todo salvo

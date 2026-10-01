@@ -49,4 +49,15 @@ class AgregarItemForm(forms.Form):
 
 
 class CobrarForm(forms.Form):
+    """Un botón de medio único (`metodo_pago`) o un pago dividido (`pago_<MEDIO>`)."""
+
     metodo_pago = forms.ChoiceField(choices=MetodoPago.choices, required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for medio in MetodoPago.values:
+            self.fields[f"pago_{medio}"] = forms.IntegerField(required=False, min_value=0)
+
+    def pagos(self):
+        """{medio: monto} del pago dividido (los vacíos cuentan como 0)."""
+        return {medio: self.cleaned_data[f"pago_{medio}"] or 0 for medio in MetodoPago.values}

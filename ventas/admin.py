@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from inventario.admin import SoloLecturaMixin
 
-from .models import Cuenta, ItemConsumo, Mesero
+from .models import Cuenta, ItemConsumo, Mesero, PagoCuenta
 
 
 @admin.register(Mesero)
@@ -23,6 +23,12 @@ class ItemConsumoInline(SoloLecturaMixin, admin.TabularInline):
     extra = 0
 
 
+class PagoCuentaInline(SoloLecturaMixin, admin.TabularInline):
+    model = PagoCuenta
+    fields = ["metodo", "monto"]
+    extra = 0
+
+
 @admin.register(Cuenta)
 class CuentaAdmin(SoloLecturaMixin, admin.ModelAdmin):
     """Las cuentas solo se modifican desde ventas/servicios.py."""
@@ -31,4 +37,4 @@ class CuentaAdmin(SoloLecturaMixin, admin.ModelAdmin):
     list_filter = ["estado", "metodo_pago", "mesero"]
     search_fields = ["identificador", "mesero__nombre"]
     date_hierarchy = "abierta_en"
-    inlines = [ItemConsumoInline]
+    inlines = [ItemConsumoInline, PagoCuentaInline]

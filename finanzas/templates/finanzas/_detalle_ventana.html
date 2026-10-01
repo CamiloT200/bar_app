@@ -8,7 +8,7 @@
         <li class="list-group-item d-flex gap-2">
           <span class="text-body-secondary text-nowrap">{{ cuenta.cerrada_en|time:"g:i a" }}</span>
           <a href="{% url 'ventas:cuenta' cuenta.pk %}" class="me-auto link-light">{{ cuenta.identificador }}</a>
-          <span class="text-body-secondary">{{ cuenta.get_metodo_pago_display|default:"sin cobro" }}</span>
+          <span class="text-body-secondary">{% include "ventas/_pagos.html" %}</span>
           <span class="text-nowrap">{{ cuenta.total|pesos }}</span>
         </li>
       {% empty %}

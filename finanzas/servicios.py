@@ -12,7 +12,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from inventario.models import Compra
-from ventas.models import Cuenta, EstadoCuenta, MetodoPago
+from ventas.models import Cuenta, EstadoCuenta, MetodoPago, PagoCuenta
 
 from .models import CategoriaGasto, CierreCaja, Gasto
 from .periodos import verificar_periodo_abierto
@@ -58,7 +58,9 @@ def detalle_ventana(desde, hasta):
     return DetalleVentana(
         cuentas_cobradas=Cuenta.objects.filter(
             estado=EstadoCuenta.CERRADA, cerrada_en__gte=desde, cerrada_en__lt=hasta
-        ).order_by("cerrada_en", "id"),
+        )
+        .prefetch_related("pagos")
+        .order_by("cerrada_en", "id"),
         compras_con_caja=Compra.objects.filter(pagada_con_caja=True, **ventana)
         .select_related("proveedor")
         .order_by("fecha", "id"),
@@ -68,35 +70,60 @@ def detalle_ventana(desde, hasta):
 
 @dataclass(frozen=True)
 class Resumen:
-    ventas_efectivo: int
-    ventas_otros_medios: int
+    # {medio: monto} con todos los medios de MetodoPago (0 si no hubo ventas).
+    ventas_por_medio: dict
     compras_efectivo: int
     gastos_efectivo: int
     cuentas_abiertas: int
+
+    @property
+    def ventas_efectivo(self):
+        return self.ventas_por_medio[MetodoPago.EFECTIVO]
+
+    @property
+    def ventas_otros_medios(self):
+        return self.ventas_totales - self.ventas_efectivo
+
+    @property
+    def ventas_totales(self):
+        return sum(self.ventas_por_medio.values())
+
+    @property
+    def otros_medios(self):
+        """[(medio, etiqueta, monto)] de los medios distintos al efectivo, en orden."""
+        return [
+            (medio, etiqueta, self.ventas_por_medio[medio])
+            for medio, etiqueta in MetodoPago.choices
+            if medio != MetodoPago.EFECTIVO
+        ]
 
     def efectivo_esperado(self, base_inicial):
         return base_inicial + self.ventas_efectivo - self.compras_efectivo - self.gastos_efectivo
 
     @property
     def cifras(self):
-        """Huella de las cuatro cifras, para detectar si cambiaron."""
-        return (
-            f"{self.ventas_efectivo}-{self.ventas_otros_medios}-"
-            f"{self.compras_efectivo}-{self.gastos_efectivo}"
-        )
+        """Huella de las cifras, para detectar si cambiaron."""
+        por_medio = "-".join(str(self.ventas_por_medio[m]) for m in MetodoPago.values)
+        return f"{por_medio}-{self.compras_efectivo}-{self.gastos_efectivo}"
 
 
 def resumen_ventana(desde, hasta):
     """Las cifras del cierre para [desde, hasta). Único cálculo: lo usan la
-    pantalla de caja (en vivo) y cerrar_caja (copia definitiva)."""
+    pantalla de caja (en vivo) y cerrar_caja (copia definitiva).
+
+    Las ventas se suman desde PagoCuenta: una cuenta con pago dividido aporta
+    a cada medio solo su parte.
+    """
     detalle = detalle_ventana(desde, hasta)
-    cuentas = detalle.cuentas_cobradas
+    ventas_por_medio = dict.fromkeys(MetodoPago.values, 0)
+    for fila in (
+        PagoCuenta.objects.filter(cuenta__in=detalle.cuentas_cobradas)
+        .values("metodo")
+        .annotate(total=Sum("monto"))
+    ):
+        ventas_por_medio[fila["metodo"]] = fila["total"]
     return Resumen(
-        ventas_efectivo=_sumar(cuentas.filter(metodo_pago=MetodoPago.EFECTIVO), "total"),
-        ventas_otros_medios=_sumar(
-            cuentas.exclude(metodo_pago=MetodoPago.EFECTIVO).filter(metodo_pago__isnull=False),
-            "total",
-        ),
+        ventas_por_medio=ventas_por_medio,
         compras_efectivo=_sumar(detalle.compras_con_caja, "total"),
         gastos_efectivo=_sumar(detalle.gastos_con_caja, "monto"),
         # Todas las abiertas, sin importar cuándo se abrieron.

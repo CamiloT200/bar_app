@@ -14,7 +14,7 @@ from inventario.models import Categoria, Producto
 from inventario.texto import ordenar_por_nombre
 
 from .forms import CANTIDADES_RAPIDAS, AbrirCuentaForm, AgregarItemForm, CobrarForm, MeseroForm
-from .models import Cuenta, EstadoCuenta, ItemConsumo, Mesero, MetodoPago
+from .models import METODO_MIXTO, Cuenta, EstadoCuenta, ItemConsumo, Mesero, MetodoPago
 from .servicios import (
     abrir_cuenta,
     agregar_item,
@@ -244,13 +244,22 @@ def cobrar(request, pk):
     if request.method == "POST":
         form = CobrarForm(request.POST)
         if form.is_valid():
-            metodo = form.cleaned_data["metodo_pago"] or None
             try:
-                cerrada = cerrar_cuenta(cuenta, metodo)
+                if "dividido" in request.POST:
+                    cerrada = cerrar_cuenta(cuenta, pagos=form.pagos())
+                else:
+                    cerrada = cerrar_cuenta(cuenta, form.cleaned_data["metodo_pago"] or None)
             except ValidationError as e:
                 messages.error(request, _primer_mensaje(e))
             else:
-                if cerrada.metodo_pago:
+                if cerrada.metodo_pago == METODO_MIXTO:
+                    partes = " + ".join(
+                        f"{p.get_metodo_display()} {pesos(p.monto)}" for p in cerrada.pagos.all()
+                    )
+                    messages.success(
+                        request, f"{cerrada.identificador} cobrada: {pesos(cerrada.total)} ({partes})"
+                    )
+                elif cerrada.metodo_pago:
                     messages.success(
                         request,
                         f"{cerrada.identificador} cobrada: {pesos(cerrada.total)} "
@@ -260,7 +269,7 @@ def cobrar(request, pk):
                     messages.success(request, f"{cerrada.identificador} cerrada sin cobro.")
                 return redirect("ventas:tablero")
         else:
-            messages.error(request, "Método de pago inválido.")
+            messages.error(request, "Método de pago o montos inválidos.")
         return redirect("ventas:cobrar", pk=cuenta.pk)
 
     metodos = [(valor, etiqueta, ICONOS_PAGO[valor]) for valor, etiqueta in MetodoPago.choices]
