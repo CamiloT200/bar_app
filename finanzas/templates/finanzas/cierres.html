@@ -12,8 +12,8 @@
     <thead>
       <tr>
         <th>Jornada</th><th class="text-end">Base</th><th class="text-end">Ventas ef.</th><th class="text-end">Otros</th>
-        <th class="text-end">Compras</th><th class="text-end">Gastos</th><th class="text-end">Esperado</th>
-        <th class="text-end">Contado</th><th class="text-end">Diferencia</th>
+        <th class="text-end">Total vendido</th><th class="text-end">Compras</th><th class="text-end">Gastos</th>
+        <th class="text-end">Dif. efectivo</th><th class="text-end">Dif. otros</th><th class="text-end">Dif. total</th>
       </tr>
     </thead>
     <tbody>
@@ -24,24 +24,28 @@
           <td class="text-end text-nowrap">{{ cierre.base_inicial|pesos }}</td>
           <td class="text-end text-nowrap">{{ cierre.ventas_efectivo|pesos }}</td>
           <td class="text-end text-nowrap">{{ cierre.ventas_otros_medios|pesos }}</td>
+          <td class="text-end text-nowrap">{{ cierre.ventas_totales|pesos }}</td>
           <td class="text-end text-nowrap">{{ cierre.compras_efectivo|pesos }}</td>
           <td class="text-end text-nowrap">{{ cierre.gastos_efectivo|pesos }}</td>
-          <td class="text-end text-nowrap">{{ cierre.efectivo_esperado|pesos }}</td>
-          <td class="text-end text-nowrap">{{ cierre.efectivo_contado|pesos }}</td>
-          <td class="text-end text-nowrap fw-bold {% if cierre.diferencia < 0 %}text-danger{% elif cierre.diferencia > 0 %}text-success{% else %}text-body-secondary{% endif %}">
-            {{ cierre.diferencia|pesos }}</td>
+          {% include "finanzas/_celda_diferencia.html" with diferencia=cierre.diferencia %}
+          {% if cierre.conteos.all %}
+            {% include "finanzas/_celda_diferencia.html" with diferencia=cierre.diferencia_otros_medios %}
+          {% else %}
+            <td class="text-end text-body-secondary" title="Cierre anterior al conteo por medio">—</td>
+          {% endif %}
+          {% include "finanzas/_celda_diferencia.html" with diferencia=cierre.diferencia_total %}
         </tr>
       {% empty %}
-        <tr><td colspan="9" class="text-center text-body-secondary py-4">Todavía no hay cierres.</td></tr>
+        <tr><td colspan="10" class="text-center text-body-secondary py-4">Todavía no hay cierres.</td></tr>
       {% endfor %}
     </tbody>
     {% if pagina.object_list %}
       <tfoot>
         <tr>
-          <th colspan="2">Totales de esta página</th>
-          <th colspan="2" class="text-end text-nowrap">Ventas {{ total_ventas|pesos }}</th>
+          <th colspan="4">Totales de esta página</th>
+          <th class="text-end text-nowrap">{{ total_ventas|pesos }}</th>
           <th colspan="4"></th>
-          <th class="text-end text-nowrap {% if total_diferencias < 0 %}text-danger{% elif total_diferencias > 0 %}text-success{% endif %}">{{ total_diferencias|pesos }}</th>
+          {% include "finanzas/_celda_diferencia.html" with diferencia=total_diferencias %}
         </tr>
       </tfoot>
     {% endif %}

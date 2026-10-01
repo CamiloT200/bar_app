@@ -15,7 +15,15 @@ from ventas.models import Cuenta, PagoCuenta
 from ventas.servicios import abrir_cuenta, agregar_item, cerrar_cuenta, quitar_item
 
 from .models import CierreCaja, Gasto
-from .servicios import abrir_caja, caja_abierta, cerrar_caja, registrar_gasto, resumen_ventana
+from .models import ConteoMedioPago
+from .servicios import (
+    MEDIOS_A_CONTAR,
+    abrir_caja,
+    caja_abierta,
+    cerrar_caja,
+    registrar_gasto,
+    resumen_ventana,
+)
 
 Pago = Cuenta.MetodoPago
 Estado = Cuenta.Estado
@@ -416,6 +424,9 @@ class VistasFinanzasTests(BaseJornada):
     def mensajes(self, respuesta):
         return [str(m) for m in respuesta.context["messages"]]
 
+    def medios_en_cero(self):
+        return {f"contado_{m}": "0" for m in MEDIOS_A_CONTAR}
+
     # 2
     def test_caja_sin_caja_abierta_y_pendiente(self):
         respuesta = self.client.get(self.url("caja"))
@@ -500,7 +511,8 @@ class VistasFinanzasTests(BaseJornada):
 
         respuesta = self.client.post(
             self.url("cerrar"),
-            {"efectivo_contado": "67000", "cifras_previas": cifras, "observaciones": "Todo normal"},
+            {"efectivo_contado": "67000", "cifras_previas": cifras, "observaciones": "Todo normal",
+             **self.medios_en_cero()},
             follow=True,
         )
         cierre = CierreCaja.objects.get(pk=respuesta.context["cierre"].pk)
@@ -509,13 +521,19 @@ class VistasFinanzasTests(BaseJornada):
         self.assertEqual(cierre.observaciones, "Todo normal")
         self.assertEqual(cierre.cuentas_abiertas_al_cerrar, 1)
         mensajes = self.mensajes(respuesta)
-        self.assertIn("Caja cerrada: faltan $ 3.000.", mensajes)
+        self.assertIn(
+            "Caja cerrada. Efectivo: faltan $ 3.000. Otros medios: cuadra exacto. "
+            "Total: faltan $ 3.000.",
+            mensajes,
+        )
         self.assertFalse(any("cambiaron" in m for m in mensajes))
 
         # Si las cifras cambiaron entre abrir la pantalla y confirmar, se avisa.
         abrir_caja(0)
         respuesta = self.client.post(
-            self.url("cerrar"), {"efectivo_contado": "0", "cifras_previas": "1-1-1-1"}, follow=True
+            self.url("cerrar"),
+            {"efectivo_contado": "0", "cifras_previas": "1-1-1-1", **self.medios_en_cero()},
+            follow=True,
         )
         self.assertTrue(any("cambiaron" in m for m in self.mensajes(respuesta)))
 
@@ -586,3 +604,87 @@ class VistasFinanzasTests(BaseJornada):
         respuesta = self.client.get(reverse("ventas:tablero"))
         self.assertNotContains(respuesta, 'id="abrir-caja"')
         self.assertNotContains(respuesta, "No hay caja abierta")
+
+
+class ConteoPorMedioTests(BaseJornada):
+    def jornada_con_varios_medios(self):
+        self.abrir(h(0), base=50000)
+        self.cuenta_cerrada(h(1), 20000, Pago.EFECTIVO)
+        self.cuenta_cerrada(h(2), 15000, Pago.NEQUI)
+        self.cuenta_cerrada(h(3), 7000, Pago.TARJETA)
+        # Una cuenta dividida: cada parte suma en su medio.
+        dividida = self.cuenta_cerrada(h(4), 3000, Pago.DAVIPLATA)
+        dividida.total, dividida.metodo_pago = 10000, "MIXTO"
+        dividida.save()
+        PagoCuenta.objects.create(cuenta=dividida, metodo=Pago.EFECTIVO, monto=7000)
+
+    def test_cierre_guarda_esperado_contado_y_diferencia_por_medio(self):
+        self.jornada_con_varios_medios()
+        contados = {Pago.NEQUI: 15000, Pago.DAVIPLATA: 3000, Pago.TARJETA: 6000, Pago.TRANSFERENCIA: 0}
+        with reloj(h(8)):
+            cierre = cerrar_caja(77000, contados_medios=contados)
+
+        conteos = {c.metodo: (c.esperado, c.contado, c.diferencia) for c in cierre.conteos.all()}
+        self.assertEqual(conteos, {
+            Pago.NEQUI: (15000, 15000, 0),
+            Pago.DAVIPLATA: (3000, 3000, 0),
+            Pago.TARJETA: (7000, 6000, -1000),
+            Pago.TRANSFERENCIA: (0, 0, 0),
+        })
+        # Efectivo: base 50.000 + 20.000 + 7.000 de la dividida.
+        self.assertEqual((cierre.efectivo_esperado, cierre.diferencia), (77000, 0))
+        self.assertEqual(cierre.diferencia_otros_medios, -1000)
+        self.assertEqual(cierre.total_esperado, 77000 + 25000)
+        self.assertEqual(cierre.total_contado, 77000 + 24000)
+        self.assertEqual(cierre.diferencia_total, -1000)
+        self.assertEqual(cierre.ventas_totales, 52000)
+
+    def test_falta_un_medio_o_medio_desconocido_no_cierra(self):
+        self.abrir(h(0))
+        incompleto = {Pago.NEQUI: 0, Pago.DAVIPLATA: 0, Pago.TARJETA: 0}
+        for contados in [incompleto, {**incompleto, Pago.TRANSFERENCIA: 0, Pago.EFECTIVO: 5}]:
+            with self.subTest(contados=contados), reloj(h(8)), self.assertRaises(ValidationError):
+                cerrar_caja(0, contados_medios=contados)
+        self.assertIsNotNone(caja_abierta())
+        self.assertFalse(ConteoMedioPago.objects.exists())
+
+    def test_la_base_de_datos_exige_diferencia_coherente(self):
+        self.abrir(h(0))
+        cierre = self.cerrar(h(8))
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ConteoMedioPago.objects.create(
+                cierre=cierre, metodo=Pago.NEQUI, esperado=100, contado=50, diferencia=0
+            )
+
+    def test_pantallas_de_cierre_por_medio(self):
+        iniciar_sesion(self.client)
+        self.jornada_con_varios_medios()
+
+        respuesta = self.client.get(reverse("finanzas:caja"))
+        self.assertContains(respuesta, "Ventas por medio de pago")
+        self.assertEqual(respuesta.context["resumen"].ventas_totales, 52000)
+
+        respuesta = self.client.get(reverse("finanzas:cerrar"))
+        for medio in MEDIOS_A_CONTAR:
+            self.assertContains(respuesta, f'name="contado_{medio}"')
+        self.assertEqual(respuesta.context["total_esperado"], 77000 + 25000)
+
+        datos = {"efectivo_contado": "77000", "contado_NEQUI": "15000", "contado_DAVIPLATA": "3000",
+                 "contado_TARJETA": "6000"}
+        respuesta = self.client.post(reverse("finanzas:cerrar"), datos)
+        self.assertContains(respuesta, "Escribe lo que dice Transferencia (0 si no hubo).")
+        self.assertIsNotNone(caja_abierta())
+
+        respuesta = self.client.post(
+            reverse("finanzas:cerrar"), {**datos, "contado_TRANSFERENCIA": "0"}, follow=True
+        )
+        self.assertIn(
+            "Caja cerrada. Efectivo: cuadra exacto. Otros medios: faltan $ 1.000. "
+            "Total: faltan $ 1.000.",
+            [str(m) for m in respuesta.context["messages"]],
+        )
+        self.assertContains(respuesta, "Tarjeta")
+        self.assertContains(respuesta, "Faltaron")
+
+        respuesta = self.client.get(reverse("finanzas:cierres"))
+        self.assertEqual(respuesta.context["total_diferencias"], -1000)

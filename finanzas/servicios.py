@@ -14,7 +14,7 @@ from django.utils import timezone
 from inventario.models import Compra
 from ventas.models import Cuenta, EstadoCuenta, MetodoPago, PagoCuenta
 
-from .models import CategoriaGasto, CierreCaja, Gasto
+from .models import CategoriaGasto, CierreCaja, ConteoMedioPago, Gasto
 from .periodos import verificar_periodo_abierto
 
 
@@ -143,14 +143,34 @@ def abrir_caja(base_inicial):
         return CierreCaja.objects.create(abierto_en=abierto_en, base_inicial=base_inicial)
 
 
-def cerrar_caja(efectivo_contado, observaciones=""):
+MEDIOS_A_CONTAR = [m for m in MetodoPago.values if m != MetodoPago.EFECTIVO]
+
+
+def cerrar_caja(efectivo_contado, observaciones="", contados_medios=None):
     """Cierra la jornada y guarda una copia de los totales.
+
+    `contados_medios` = {medio: lo que muestra la app/datáfono} para cada medio
+    distinto al efectivo (todos obligatorios). Se guarda un ConteoMedioPago por
+    medio con lo esperado según las cuentas cobradas. Si es None, el cierre no
+    lleva conteo por medio (como los cierres anteriores a esta función).
 
     Las cuentas abiertas no bloquean el cierre: solo se cuentan en
     `cuentas_abiertas_al_cerrar` (ver CierreCaja.advertencia).
     """
     if not _es_entero(efectivo_contado) or efectivo_contado < 0:
         raise ValidationError(f"Efectivo contado inválido: {efectivo_contado}.")
+    if contados_medios is not None:
+        desconocidos = set(contados_medios) - set(MEDIOS_A_CONTAR)
+        if desconocidos:
+            raise ValidationError(f"Medio de pago inválido para contar: {', '.join(sorted(desconocidos))}.")
+        for medio in MEDIOS_A_CONTAR:
+            contado = contados_medios.get(medio)
+            if contado is None:
+                raise ValidationError(
+                    f"Falta lo contado en {MetodoPago(medio).label}.", code="falta_conteo"
+                )
+            if not _es_entero(contado) or contado < 0:
+                raise ValidationError(f"Contado inválido en {MetodoPago(medio).label}: {contado}.")
 
     with transaction.atomic():
         cierre = caja_abierta()
@@ -172,6 +192,17 @@ def cerrar_caja(efectivo_contado, observaciones=""):
         cierre.observaciones = observaciones.strip()
         cierre.cerrado_en = cerrado_en
         cierre.save()
+        if contados_medios is not None:
+            ConteoMedioPago.objects.bulk_create(
+                ConteoMedioPago(
+                    cierre=cierre,
+                    metodo=medio,
+                    esperado=resumen.ventas_por_medio[medio],
+                    contado=contados_medios[medio],
+                    diferencia=contados_medios[medio] - resumen.ventas_por_medio[medio],
+                )
+                for medio in MEDIOS_A_CONTAR
+            )
         return cierre
 
 

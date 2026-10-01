@@ -2,6 +2,8 @@ from django import forms
 
 from inventario.forms import EstiloBootstrapMixin
 
+from ventas.models import MetodoPago
+
 from .models import CategoriaGasto
 
 
@@ -17,6 +19,23 @@ class CerrarCajaForm(forms.Form):
     observaciones = forms.CharField(required=False, widget=forms.Textarea)
     # Cifras que se mostraron al abrir la pantalla, para avisar si cambiaron.
     cifras_previas = forms.CharField(required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Lo que muestra la app o el datáfono de cada medio distinto al efectivo.
+        for medio, etiqueta in MetodoPago.choices:
+            if medio != MetodoPago.EFECTIVO:
+                self.fields[f"contado_{medio}"] = forms.IntegerField(
+                    min_value=0,
+                    error_messages={"required": f"Escribe lo que dice {etiqueta} (0 si no hubo)."},
+                )
+
+    def contados_medios(self):
+        return {
+            nombre.removeprefix("contado_"): valor
+            for nombre, valor in self.cleaned_data.items()
+            if nombre.startswith("contado_")
+        }
 
 
 class GastoForm(EstiloBootstrapMixin, forms.Form):

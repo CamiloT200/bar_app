@@ -105,13 +105,18 @@ def cerrar(request):
     if request.method == "POST" and form.is_valid():
         try:
             cierre = cerrar_caja(
-                form.cleaned_data["efectivo_contado"], form.cleaned_data["observaciones"]
+                form.cleaned_data["efectivo_contado"],
+                form.cleaned_data["observaciones"],
+                contados_medios=form.contados_medios(),
             )
         except ValidationError as e:
             form.add_error(None, _primer_mensaje(e))
         else:
             messages.success(
-                request, f"Caja cerrada: {_texto_diferencia(cierre.diferencia)}."
+                request,
+                f"Caja cerrada. Efectivo: {_texto_diferencia(cierre.diferencia)}. "
+                f"Otros medios: {_texto_diferencia(cierre.diferencia_otros_medios)}. "
+                f"Total: {_texto_diferencia(cierre.diferencia_total)}.",
             )
             previas = form.cleaned_data["cifras_previas"]
             actuales = resumen_ventana(cierre.abierto_en, cierre.cerrado_en).cifras
@@ -124,6 +129,13 @@ def cerrar(request):
             return redirect("finanzas:cierre", pk=cierre.pk)
 
     resumen = resumen_ventana(caja.abierto_en, timezone.now())
+    esperado = resumen.efectivo_esperado(caja.base_inicial)
+    # Una fila por medio a contar: lo esperado según las cuentas y, si el
+    # formulario volvió con error, lo que ya se había escrito.
+    medios = [
+        (medio, etiqueta, monto, form[f"contado_{medio}"].value())
+        for medio, etiqueta, monto in resumen.otros_medios
+    ]
     return render(
         request,
         "finanzas/cerrar.html",
@@ -131,7 +143,9 @@ def cerrar(request):
             "caja": caja,
             "form": form,
             "resumen": resumen,
-            "esperado": resumen.efectivo_esperado(caja.base_inicial),
+            "esperado": esperado,
+            "medios": medios,
+            "total_esperado": esperado + resumen.ventas_otros_medios,
             "cuentas_abiertas": _cuentas_abiertas(),
             "billetes": BILLETES,
         },
@@ -173,26 +187,35 @@ def gasto_nuevo(request):
 
 @require_GET
 def cierres(request):
-    cerrados = CierreCaja.objects.filter(cerrado_en__isnull=False).order_by("-cerrado_en")
+    cerrados = (
+        CierreCaja.objects.filter(cerrado_en__isnull=False)
+        .prefetch_related("conteos")
+        .order_by("-cerrado_en")
+    )
     pagina = Paginator(cerrados, CIERRES_POR_PAGINA).get_page(request.GET.get("pagina"))
     return render(
         request,
         "finanzas/cierres.html",
         {
             "pagina": pagina,
-            "total_diferencias": sum(c.diferencia for c in pagina),
-            "total_ventas": sum(c.ventas_efectivo + c.ventas_otros_medios for c in pagina),
+            # Diferencia total = efectivo + otros medios contados.
+            "total_diferencias": sum(c.diferencia_total for c in pagina),
+            "total_ventas": sum(c.ventas_totales for c in pagina),
         },
     )
 
 
 @require_GET
 def cierre(request, pk):
-    cierre = get_object_or_404(CierreCaja, pk=pk)
+    cierre = get_object_or_404(CierreCaja.objects.prefetch_related("conteos"), pk=pk)
     if cierre.esta_abierta:
         return redirect("finanzas:caja")
     return render(
         request,
         "finanzas/cierre.html",
-        {"cierre": cierre, "detalle": detalle_ventana(cierre.abierto_en, cierre.cerrado_en)},
+        {
+            "cierre": cierre,
+            "conteos": list(cierre.conteos.all()),
+            "detalle": detalle_ventana(cierre.abierto_en, cierre.cerrado_en),
+        },
     )

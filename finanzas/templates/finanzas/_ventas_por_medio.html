@@ -1,0 +1,18 @@
+{% load formato %}
+{# Ventas de la jornada por medio de pago y su total. Uso: include with resumen=… #}
+<div class="card mb-3">
+  <div class="card-body">
+    <h2 class="h5">Ventas por medio de pago</h2>
+    <table class="table align-middle fs-5 mb-0">
+      <tbody>
+        <tr><td>Efectivo</td><td class="text-end text-nowrap">{{ resumen.ventas_efectivo|pesos }}</td></tr>
+        {% for medio, etiqueta, monto in resumen.otros_medios %}
+          <tr><td>{{ etiqueta }}</td><td class="text-end text-nowrap">{{ monto|pesos }}</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="fs-4"><th>Total vendido</th><th class="text-end text-nowrap">{{ resumen.ventas_totales|pesos }}</th></tr>
+      </tfoot>
+    </table>
+  </div>
+</div>

@@ -13,19 +13,47 @@
 {% include "finanzas/_resumen.html" with ve=cierre.ventas_efectivo vo=cierre.ventas_otros_medios ce=cierre.compras_efectivo ge=cierre.gastos_efectivo %}
 
 <div class="row g-3 mb-3">
-  <div class="col-md-6 col-xl-4">
-    <div class="card h-100"><div class="card-body fs-4">
-      <div class="d-flex justify-content-between"><span class="text-body-secondary">Base inicial</span><span>{{ cierre.base_inicial|pesos }}</span></div>
-      <div class="d-flex justify-content-between"><span class="text-body-secondary">Esperado</span><span>{{ cierre.efectivo_esperado|pesos }}</span></div>
-      <div class="d-flex justify-content-between"><span class="text-body-secondary">Contado</span><span>{{ cierre.efectivo_contado|pesos }}</span></div>
-      <hr>
-      <div class="total-grande text-center {% if cierre.diferencia < 0 %}text-danger{% elif cierre.diferencia > 0 %}text-success{% else %}text-body-secondary{% endif %}">
-        {% if cierre.diferencia < 0 %}Faltaron{% elif cierre.diferencia > 0 %}Sobraron{% else %}Cuadró exacto{% endif %}
-        {% if cierre.diferencia %}{{ cierre.diferencia|pesos|cut:"-" }}{% endif %}
+  <div class="col-lg-7">
+    <div class="card h-100"><div class="card-body">
+      <h2 class="h4">Cuadre</h2>
+      <table class="table align-middle fs-5 mb-2">
+        <thead><tr><th>Medio</th><th class="text-end">Esperado</th><th class="text-end">Contado</th><th class="text-end">Diferencia</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Efectivo <span class="d-block fs-6 text-body-secondary">en el cajón (con base {{ cierre.base_inicial|pesos }})</span></td>
+            <td class="text-end text-nowrap">{{ cierre.efectivo_esperado|pesos }}</td>
+            <td class="text-end text-nowrap">{{ cierre.efectivo_contado|pesos }}</td>
+            {% include "finanzas/_celda_diferencia.html" with diferencia=cierre.diferencia %}
+          </tr>
+          {% for conteo in conteos %}
+            <tr>
+              <td>{{ conteo.etiqueta }}</td>
+              <td class="text-end text-nowrap">{{ conteo.esperado|pesos }}</td>
+              <td class="text-end text-nowrap">{{ conteo.contado|pesos }}</td>
+              {% include "finanzas/_celda_diferencia.html" with diferencia=conteo.diferencia %}
+            </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr class="fs-4">
+            <th>TOTAL</th>
+            <th class="text-end text-nowrap">{{ cierre.total_esperado|pesos }}</th>
+            <th class="text-end text-nowrap">{{ cierre.total_contado|pesos }}</th>
+            {% include "finanzas/_celda_diferencia.html" with diferencia=cierre.diferencia_total %}
+          </tr>
+        </tfoot>
+      </table>
+      {% if not conteos %}
+        <p class="text-body-secondary fs-6 mb-2">Este cierre es anterior al conteo por medio de pago: solo se contó el efectivo.</p>
+      {% endif %}
+      <div class="total-grande text-center {% if cierre.diferencia_total < 0 %}text-danger{% elif cierre.diferencia_total > 0 %}text-success{% else %}text-body-secondary{% endif %}">
+        {% if cierre.diferencia_total < 0 %}Faltaron{% elif cierre.diferencia_total > 0 %}Sobraron{% else %}Cuadró exacto{% endif %}
+        {% if cierre.diferencia_total %}{{ cierre.diferencia_total|pesos|cut:"-" }}{% endif %}
       </div>
+      <p class="text-body-secondary mb-0 mt-2">Total vendido en la jornada: <strong>{{ cierre.ventas_totales|pesos }}</strong></p>
     </div></div>
   </div>
-  <div class="col-md-6 col-xl-8">
+  <div class="col-lg-5">
     {% if cierre.advertencia %}<div class="alert alert-warning fs-5 py-2"><i class="bi bi-exclamation-triangle"></i> {{ cierre.advertencia }}</div>{% endif %}
     {% if cierre.observaciones %}
       <div class="card"><div class="card-body"><h2 class="h5">Observaciones</h2><p class="mb-0 fs-5">{{ cierre.observaciones|linebreaksbr }}</p></div></div>

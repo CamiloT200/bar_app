@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from inventario.admin import SoloLecturaMixin
 
-from .models import CierreCaja, Gasto
+from .models import CierreCaja, ConteoMedioPago, Gasto
 
 
 @admin.register(Gasto)
@@ -15,8 +15,15 @@ class GastoAdmin(SoloLecturaMixin, admin.ModelAdmin):
     date_hierarchy = "fecha"
 
 
+class ConteoMedioPagoInline(SoloLecturaMixin, admin.TabularInline):
+    model = ConteoMedioPago
+    fields = ["metodo", "esperado", "contado", "diferencia"]
+    extra = 0
+
+
 @admin.register(CierreCaja)
 class CierreCajaAdmin(SoloLecturaMixin, admin.ModelAdmin):
+    inlines = [ConteoMedioPagoInline]
     list_display = [
         "abierto_en",
         "cerrado_en",

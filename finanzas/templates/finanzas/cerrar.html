@@ -24,15 +24,15 @@
 <form method="post" action="{% url 'finanzas:cerrar' %}" id="form-cerrar">
   {% csrf_token %}
   {% for error in form.non_field_errors %}<div class="alert alert-danger fs-5 py-2">{{ error }}</div>{% endfor %}
-  {% for error in form.efectivo_contado.errors %}<div class="alert alert-danger fs-5 py-2">{{ error }}</div>{% endfor %}
+  {% for campo in form %}{% for error in campo.errors %}<div class="alert alert-danger fs-5 py-2">{{ error }}</div>{% endfor %}{% endfor %}
   <input type="hidden" name="efectivo_contado" id="efectivo_contado" value="">
   <input type="hidden" name="cifras_previas" value="{{ resumen.cifras }}">
 
   <div class="row g-4">
     <div class="col-lg-6">
-      <h2 class="h4">Contar el efectivo</h2>
+      <h2 class="h4">1. Contar el efectivo</h2>
       {# Solo se envía el total (campo oculto). Estos campos no tienen name. #}
-      <table class="table align-middle fs-5 mb-2" id="conteo">
+      <table class="table align-middle fs-5 mb-4" id="conteo">
         <thead><tr><th>Billete</th><th style="width: 9rem">Cantidad</th><th class="text-end">Subtotal</th></tr></thead>
         <tbody>
           {% for billete in billetes %}
@@ -51,20 +51,66 @@
           </tr>
         </tbody>
       </table>
+
+      <h2 class="h4">2. Otros medios de pago</h2>
+      <p class="text-body-secondary">Escribe lo que muestra la app o el datáfono de cada medio en esta jornada.</p>
+      <table class="table align-middle fs-5 mb-4" id="conteo-medios">
+        <thead><tr><th>Medio</th><th class="text-end">Según cuentas</th><th style="width: 10rem">Lo que dice la app</th><th class="text-end">Diferencia</th></tr></thead>
+        <tbody>
+          {% for medio, etiqueta, monto, previo in medios %}
+            <tr>
+              <td>{{ etiqueta }}</td>
+              <td class="text-end text-nowrap">{{ monto|pesos }}</td>
+              <td><input type="number" name="contado_{{ medio }}" min="0" step="100" inputmode="numeric" required
+                         class="form-control form-control-tactil contado-medio" data-esperado="{{ monto }}"
+                         value="{% if previo is not None and previo != '' %}{{ previo }}{% elif monto == 0 %}0{% endif %}"
+                         aria-label="Lo que dice {{ etiqueta }}"></td>
+              <td class="text-end text-nowrap fw-bold diferencia-medio"></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
       <label for="observaciones" class="form-label fs-5">Observaciones (opcional)</label>
       <textarea name="observaciones" id="observaciones" rows="2" class="form-control fs-5">{{ form.observaciones.value|default_if_none:'' }}</textarea>
     </div>
 
     <div class="col-lg-6">
       <div class="card detalle-fijo">
-        <div class="card-body fs-4">
-          <div class="d-flex justify-content-between"><span class="text-body-secondary">Base inicial</span><span>{{ caja.base_inicial|pesos }}</span></div>
-          <div class="d-flex justify-content-between"><span class="text-body-secondary">Efectivo esperado</span>
-            <span class="fw-bold" id="esperado" data-esperado="{{ esperado }}">{{ esperado|pesos }}</span></div>
-          <div class="d-flex justify-content-between"><span class="text-body-secondary">Efectivo contado</span>
-            <span class="fw-bold" id="contado">—</span></div>
-          <hr>
-          <div class="total-grande text-center" id="diferencia" aria-live="polite">Cuenta el efectivo</div>
+        <div class="card-body">
+          <h2 class="h4">3. Cuadre</h2>
+          <table class="table align-middle fs-5 mb-2">
+            <thead><tr><th>Medio</th><th class="text-end">Esperado</th><th class="text-end">Contado</th><th class="text-end">Diferencia</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>Efectivo <span class="d-block fs-6 text-body-secondary">en el cajón (con base {{ caja.base_inicial|pesos }})</span></td>
+                <td class="text-end text-nowrap" id="esperado" data-esperado="{{ esperado }}">{{ esperado|pesos }}</td>
+                <td class="text-end text-nowrap" id="contado">—</td>
+                <td class="text-end text-nowrap fw-bold" id="diferencia-efectivo">—</td>
+              </tr>
+              {% for medio, etiqueta, monto, previo in medios %}
+                <tr>
+                  <td>{{ etiqueta }}</td>
+                  <td class="text-end text-nowrap">{{ monto|pesos }}</td>
+                  <td class="text-end text-nowrap cuadre-contado" data-medio="{{ medio }}">—</td>
+                  <td class="text-end text-nowrap fw-bold cuadre-diferencia" data-medio="{{ medio }}">—</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr class="fs-4">
+                <th>TOTAL</th>
+                <th class="text-end text-nowrap">{{ total_esperado|pesos }}</th>
+                <th class="text-end text-nowrap" id="total-contado">—</th>
+                <th class="text-end text-nowrap" id="total-diferencia">—</th>
+              </tr>
+            </tfoot>
+          </table>
+          <div class="total-grande text-center my-2" id="diferencia" aria-live="polite">Cuenta el efectivo</div>
+          <p class="text-body-secondary mb-0">
+            Total vendido en la jornada: <strong>{{ resumen.ventas_totales|pesos }}</strong>
+            (Efectivo {{ resumen.ventas_efectivo|pesos }}{% for medio, etiqueta, monto in resumen.otros_medios %} · {{ etiqueta }} {{ monto|pesos }}{% endfor %})
+          </p>
         </div>
         <div class="card-footer">
           <button type="button" class="btn btn-primary btn-lg btn-tactil w-100 fs-3" id="boton-cerrar" disabled
@@ -82,7 +128,9 @@
     <div class="modal-content">
       <div class="modal-header"><h2 class="modal-title h4" id="titulo-cerrar">¿Cerrar la jornada?</h2></div>
       <div class="modal-body fs-5">
-        <p>Contado: <strong id="modal-contado"></strong> · <span id="modal-diferencia"></span></p>
+        <p class="mb-1">Efectivo: <span id="modal-efectivo"></span></p>
+        <p class="mb-1">Otros medios: <span id="modal-medios"></span></p>
+        <p>Total: <strong id="modal-total"></strong></p>
         <p class="mb-0 text-warning">No se puede deshacer.</p>
       </div>
       <div class="modal-footer">
@@ -96,16 +144,18 @@
 
 {% block scripts %}
 <script>
-  // Suma las denominaciones en vivo y llena el único campo que se envía.
+  // Suma el efectivo por denominación (solo se envía el total) y cuadra cada
+  // medio contra lo que dicen las cuentas. Ayuda en pantalla: el servidor
+  // recalcula todo al cerrar.
   (function () {
     var pesos = window.formatoPesos;
-    var esperado = parseInt(document.getElementById("esperado").dataset.esperado, 10);
+    var esperadoEfectivo = parseInt(document.getElementById("esperado").dataset.esperado, 10);
     var oculto = document.getElementById("efectivo_contado");
     var monedas = document.getElementById("monedas");
     var denominaciones = document.querySelectorAll(".denominacion");
-    var contado = document.getElementById("contado");
-    var diferencia = document.getElementById("diferencia");
+    var medios = Array.prototype.slice.call(document.querySelectorAll(".contado-medio"));
     var boton = document.getElementById("boton-cerrar");
+    var grande = document.getElementById("diferencia");
 
     function entero(input) {
       var n = parseInt(input.value, 10);
@@ -118,40 +168,78 @@
       return { texto: "Cuadra exacto", clase: "text-body-secondary" };
     }
 
+    function pintar(elemento, d, base) {
+      var t = textoDiferencia(d);
+      elemento.textContent = t.texto;
+      elemento.className = base + " " + t.clase;
+      return t;
+    }
+
     function recalcular() {
-      var total = 0, algo = monedas.value !== "";
+      // Efectivo
+      var efectivo = 0, hayEfectivo = monedas.value !== "";
       denominaciones.forEach(function (input) {
         var sub = entero(input) * parseInt(input.dataset.valor, 10);
         input.closest("tr").querySelector(".subtotal").textContent = input.value !== "" ? pesos(sub) : "";
-        if (input.value !== "") algo = true;
-        total += sub;
+        if (input.value !== "") hayEfectivo = true;
+        efectivo += sub;
       });
-      total += entero(monedas);
+      efectivo += entero(monedas);
       document.getElementById("subtotal-monedas").textContent = monedas.value !== "" ? pesos(entero(monedas)) : "";
+      oculto.value = hayEfectivo ? efectivo : "";
+      document.getElementById("contado").textContent = hayEfectivo ? pesos(efectivo) : "—";
+      var celdaEfectivo = document.getElementById("diferencia-efectivo");
+      if (hayEfectivo) pintar(celdaEfectivo, efectivo - esperadoEfectivo, "text-end text-nowrap fw-bold");
+      else celdaEfectivo.textContent = "—";
 
-      if (!algo) {
-        oculto.value = "";
-        contado.textContent = "—";
-        diferencia.textContent = "Cuenta el efectivo";
-        diferencia.className = "total-grande text-center";
-        boton.disabled = true;
+      // Otros medios
+      var contadoMedios = 0, esperadoMedios = 0, medioFaltante = false;
+      medios.forEach(function (input) {
+        var medio = input.name.replace("contado_", "");
+        var esperado = parseInt(input.dataset.esperado, 10);
+        var fila = input.closest("tr").querySelector(".diferencia-medio");
+        var cuadreContado = document.querySelector('.cuadre-contado[data-medio="' + medio + '"]');
+        var cuadreDiferencia = document.querySelector('.cuadre-diferencia[data-medio="' + medio + '"]');
+        esperadoMedios += esperado;
+        if (input.value === "") {
+          medioFaltante = true;
+          fila.textContent = ""; cuadreContado.textContent = "—"; cuadreDiferencia.textContent = "—";
+          cuadreDiferencia.className = "text-end text-nowrap fw-bold cuadre-diferencia";
+          return;
+        }
+        var contado = entero(input);
+        contadoMedios += contado;
+        cuadreContado.textContent = pesos(contado);
+        pintar(fila, contado - esperado, "text-end text-nowrap fw-bold diferencia-medio");
+        pintar(cuadreDiferencia, contado - esperado, "text-end text-nowrap fw-bold cuadre-diferencia");
+      });
+
+      // Totales: solo cuando todo está contado.
+      var listo = hayEfectivo && !medioFaltante;
+      var totalEsperado = esperadoEfectivo + esperadoMedios;
+      var totalContado = efectivo + contadoMedios;
+      document.getElementById("total-contado").textContent = listo ? pesos(totalContado) : "—";
+      var celdaTotal = document.getElementById("total-diferencia");
+      boton.disabled = !listo;
+      if (!listo) {
+        celdaTotal.textContent = "—";
+        celdaTotal.className = "text-end text-nowrap";
+        grande.textContent = hayEfectivo ? "Falta contar otros medios" : "Cuenta el efectivo";
+        grande.className = "total-grande text-center my-2";
         return;
       }
-      var d = textoDiferencia(total - esperado);
-      oculto.value = total;
-      contado.textContent = pesos(total);
-      diferencia.textContent = d.texto;
-      diferencia.className = "total-grande text-center " + d.clase;
-      boton.disabled = false;
-      document.getElementById("modal-contado").textContent = pesos(total);
-      document.getElementById("modal-diferencia").textContent = d.texto;
-      document.getElementById("modal-diferencia").className = d.clase;
+      pintar(celdaTotal, totalContado - totalEsperado, "text-end text-nowrap");
+      var total = pintar(grande, totalContado - totalEsperado, "total-grande text-center my-2");
+      pintar(document.getElementById("modal-efectivo"), efectivo - esperadoEfectivo, "");
+      pintar(document.getElementById("modal-medios"), contadoMedios - esperadoMedios, "");
+      document.getElementById("modal-total").textContent = total.texto;
+      document.getElementById("modal-total").className = total.clase;
     }
 
-    document.getElementById("conteo").addEventListener("input", recalcular);
+    document.getElementById("form-cerrar").addEventListener("input", recalcular);
     // Enter en un campo no debe enviar el formulario sin pasar por la confirmación.
-    document.getElementById("conteo").addEventListener("keydown", function (e) {
-      if (e.key === "Enter") e.preventDefault();
+    document.querySelectorAll("#conteo input, #conteo-medios input").forEach(function (campo) {
+      campo.addEventListener("keydown", function (e) { if (e.key === "Enter") e.preventDefault(); });
     });
     recalcular();
   })();

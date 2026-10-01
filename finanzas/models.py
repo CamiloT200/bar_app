@@ -120,3 +120,59 @@ class CierreCaja(models.Model):
         if not n:
             return ""
         return f"Quedan {n} cuenta(s) abierta(s); su dinero entrará en la jornada en que se cobren."
+
+    # Totales del cuadre: efectivo en el cajón + cada otro medio contado.
+    # Los cierres anteriores al conteo por medio no tienen conteos.
+    @property
+    def diferencia_otros_medios(self):
+        return sum(c.diferencia for c in self.conteos.all())
+
+    @property
+    def total_esperado(self):
+        return self.efectivo_esperado + sum(c.esperado for c in self.conteos.all())
+
+    @property
+    def total_contado(self):
+        return self.efectivo_contado + sum(c.contado for c in self.conteos.all())
+
+    @property
+    def diferencia_total(self):
+        return self.diferencia + self.diferencia_otros_medios
+
+    @property
+    def ventas_totales(self):
+        return self.ventas_efectivo + self.ventas_otros_medios
+
+
+class ConteoMedioPago(models.Model):
+    """Cuadre de un medio distinto al efectivo al cerrar caja: lo que dicen
+    las cuentas cobradas (esperado) contra lo que muestra la app o el
+    datáfono (contado)."""
+
+    cierre = models.ForeignKey(CierreCaja, on_delete=models.PROTECT, related_name="conteos")
+    # Valor de ventas.MetodoPago (sin importar la app: ver nota al inicio).
+    metodo = models.CharField(max_length=15)
+    esperado = models.PositiveIntegerField()
+    contado = models.PositiveIntegerField()
+    diferencia = models.IntegerField(help_text="Contado − esperado: negativo = faltante.")
+
+    class Meta:
+        ordering = ["id"]
+        verbose_name = "conteo por medio de pago"
+        verbose_name_plural = "conteos por medio de pago"
+        constraints = [
+            models.UniqueConstraint(fields=["cierre", "metodo"], name="conteo_un_medio_por_cierre"),
+            models.CheckConstraint(
+                condition=Q(diferencia=F("contado") - F("esperado")),
+                name="conteo_diferencia_coherente",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.etiqueta}: esperado {self.esperado}, contado {self.contado}"
+
+    @property
+    def etiqueta(self):
+        from ventas.models import MetodoPago
+
+        return MetodoPago(self.metodo).label if self.metodo in MetodoPago.values else self.metodo

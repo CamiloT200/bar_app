@@ -1,0 +1,1 @@
+{% load formato %}<td class="text-end text-nowrap fw-bold {% if diferencia < 0 %}text-danger{% elif diferencia > 0 %}text-success{% else %}text-body-secondary{% endif %}">{% if diferencia > 0 %}+{% endif %}{{ diferencia|pesos }}</td>
